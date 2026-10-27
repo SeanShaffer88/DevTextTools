@@ -1,0 +1,125 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#060606;font-family:'Cascadia Mono','Consolas','DejaVu Sans Mono',monospace;color:#d6d6d6}
+.win{background:#0a0a0a;width:1680px;height:1000px;display:flex;flex-direction:column;overflow:hidden}
+.titlebar{height:34px;background:#111;display:flex;align-items:center;padding:0 12px;font-size:12px;color:#bbb;border-bottom:1px solid #1c1c1c}
+.titlebar .app-ico{color:#4ade80;margin-right:8px;font-weight:bold}
+.titlebar .winbtns{margin-left:auto;color:#888;letter-spacing:14px}
+.header{height:46px;display:flex;align-items:center;gap:14px;padding:0 14px;border-bottom:1px solid #1f1f1f}
+.logo{color:#4ade80;font-weight:bold;font-size:16px;letter-spacing:2px}
+.meta{color:#777;font-size:11px;letter-spacing:1px}
+.histbtn{margin-left:auto;background:rgba(74,222,128,.13);color:#4ade80;border:1px solid rgba(74,222,128,.35);padding:5px 14px;font:inherit;font-size:12px;letter-spacing:1px}
+.body{flex:1;display:flex;min-height:0}
+.rail{width:252px;border-right:1px solid #1f1f1f;padding:12px 12px;display:flex;flex-direction:column}
+.rail.wide{width:300px;border-right:none;border-left:1px solid #1f1f1f}
+.h{color:#4ade80;font-size:11px;letter-spacing:2px;margin:12px 0 8px}
+.h:first-child{margin-top:0}
+.searchrow{display:flex;gap:6px}
+.searchbox{flex:1;background:#0d0d0d;border:1px solid #262626;color:#999;padding:6px 8px;font-size:12px}
+.clearbtn{background:#1b1b1b;border:1px solid #2b2b2b;color:#ccc;padding:6px 10px;font:inherit;font-size:12px}
+.mode{display:flex;justify-content:space-between;padding:7px 10px;font-size:13px;letter-spacing:1px;color:#c9c9c9;border-left:3px solid transparent}
+.mode .alt{color:#555;font-size:11px}
+.mode.active{background:rgba(74,222,128,.15);border-left:3px solid #4ade80;color:#4ade80}
+.foot{margin-top:auto;color:#5c5c5c;font-size:11px;line-height:1.5}
+.center{flex:1;padding:14px 18px;overflow:hidden}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:#151515;border:1px solid #2b2b2b;padding:6px 12px;font-size:12.5px;color:#cfcfcf}
+.chip.active{border-color:#4ade80;color:#4ade80}
+.divider{border-top:1px solid #1f1f1f;margin:14px 0}
+.tooltitle{color:#4ade80;font-size:17px;font-weight:bold;letter-spacing:1px}
+.idline{color:#666;font-size:12px;margin:4px 0 8px}
+.desc{color:#c4c4c4;font-size:13.5px;line-height:1.55;max-width:1050px}
+.display{border:1px solid #262626;padding:10px 12px;margin:14px 0;max-width:820px}
+.display .dl{color:#666;font-size:10.5px;letter-spacing:1px;margin-bottom:6px}
+.display .dt{color:#d6d6d6;font-size:13px}
+.frow{display:flex;align-items:flex-start;gap:14px;margin:10px 0}
+.flabel{width:150px;text-align:right;color:#999;font-size:12px;letter-spacing:1px;padding-top:8px}
+.fbox{flex:1;background:#0d0d0d;border:1px solid #262626;padding:9px 11px;font-size:13px;line-height:1.6;color:#e2e2e2;white-space:pre-wrap;min-height:34px}
+.fbox.tall{min-height:110px}
+.fbox.out{min-height:150px}
+.hintline{color:#666;font-size:12px;padding-top:8px}
+.btnrow{display:flex;gap:8px;margin-top:14px;align-items:center}
+.btn{background:#1b1b1b;border:1px solid #2b2b2b;color:#ddd;padding:10px 22px;font:inherit;font-size:12.5px;letter-spacing:1px}
+.btn.green{color:#4ade80}
+.btn.red{color:#f87171}
+.btnrow .hint{color:#666;font-size:12px;margin-left:6px}
+.expl{color:#bdbdbd;font-size:12.5px;line-height:1.6}
+.clearlog{background:#1b1b1b;border:1px solid #2b2b2b;color:#f87171;padding:6px 14px;font:inherit;font-size:12px;letter-spacing:1px;margin:10px 0}
+.entry{border:1px solid #262626;padding:10px 12px;margin-bottom:10px}
+.entry .et{color:#777;font-size:11.5px}
+.entry .en{color:#4ade80;font-size:12.5px;margin-left:8px}
+.entry .eb{background:#1b1b1b;border:1px solid #2b2b2b;color:#ccc;padding:3px 10px;font:inherit;font-size:11px;float:right}
+.entry .ed{color:#c9c9c9;font-size:12px;line-height:1.6;margin-top:7px;white-space:pre-wrap}
+.io2{display:flex;gap:14px}
+.io2 .col{flex:1}
+.catrow{display:flex;flex-wrap:wrap;gap:6px;padding:12px 18px 0}
+</style></head><body>
+<div class="win"><div class="titlebar"><span class="app-ico">&lt;/&gt;</span>DevTextTools — every text &amp; dev tool, offline<span class="winbtns">— ▢ ✕</span></div><div class="header"><span class="logo">DEVTEXTTOOLS</span><span class="meta">238 TOOLS — OFFLINE — NO ADS</span><button class="histbtn">HISTORY (3)</button></div>
+<div class="body">
+<div class="rail">
+  <div class="h">SEARCH</div>
+  <div class="searchrow"><div class="searchbox">filter tools...</div><button class="clearbtn">Clear</button></div>
+  <div class="h">CATEGORIES</div>
+  <div class="mode"><span>ALL TOOLS</span><span class="alt">Alt+1</span></div><div class="mode"><span>★ FAVORITES</span><span class="alt"></span></div><div class="mode"><span>◷ RECENT</span><span class="alt"></span></div><div class="mode"><span>CASE</span><span class="alt">Alt+2</span></div><div class="mode"><span>LINES</span><span class="alt">Alt+3</span></div><div class="mode"><span>TRANSFORM</span><span class="alt">Alt+4</span></div><div class="mode"><span>ANALYSE</span><span class="alt">Alt+5</span></div><div class="mode"><span>ENCODE / DECODE</span><span class="alt">Alt+6</span></div><div class="mode active"><span>DEVELOPER / FORMAT</span><span class="alt">Alt+7</span></div><div class="mode"><span>HASH / CRYPTO</span><span class="alt">Alt+8</span></div><div class="mode"><span>GENERATORS</span><span class="alt">Alt+9</span></div><div class="mode"><span>CONVERTERS</span><span class="alt">Alt+0</span></div><div class="mode"><span>CALCULATORS</span><span class="alt">Alt+Q</span></div><div class="mode"><span>FANCY TEXT</span><span class="alt">Alt+W</span></div><div class="mode"><span>DATE & TIME</span><span class="alt">Alt+E</span></div><div class="mode"><span>FILES</span><span class="alt">Alt+R</span></div><div class="h">VIEWS</div><div class="mode"><span>TOOLS</span><span class="alt"></span></div><div class="mode"><span>TIMERS</span><span class="alt"></span></div><div class="mode"><span>PIPELINES</span><span class="alt"></span></div><div class="mode"><span>REGEX LAB</span><span class="alt"></span></div><div class="mode"><span>REPLACE</span><span class="alt"></span></div><div class="mode"><span>JSON TREE</span><span class="alt"></span></div>
+  <div class="foot">238 tools in 14 categories. Alt+ a shown key picks a category.</div>
+</div>
+<div class="center">
+  <div class="h">TOOLS — DEVELOPER / FORMAT</div>
+  
+<div class="chips">
+  <span class="chip active">JSON Format / Beautify</span><span class="chip">JSON Minify</span>
+  <span class="chip">JSON Validate + Stats</span><span class="chip">JSON Array → CSV</span>
+  <span class="chip">CSV → JSON</span><span class="chip">JSON → YAML</span>
+  <span class="chip">XML Format</span><span class="chip">SQL Format (basic)</span>
+  <span class="chip">CSS Minify (basic)</span><span class="chip">JWT Decoder</span>
+  <span class="chip">Regex Tester</span><span class="chip">Cron Explainer</span>
+  <span class="chip">JSONPath Query</span><span class="chip">Hash Identifier</span>
+  <span class="chip">JWT Builder / Signer (HS256)</span><span class="chip">Mock Data Generator</span>
+  <span class="chip">Regex Explainer</span><span class="chip">JSON Structural Diff</span>
+</div>
+  <div class="divider"></div>
+  
+<div class="tooltitle">JSON FORMAT / BEAUTIFY</div>
+<div class="idline">[Developer / Format]&nbsp;&nbsp;id: dev-json-pretty</div>
+<div class="desc">Pretty-print JSON with 2-space indent. Also validates it — a mistake is reported in plain words, never a fake answer.</div>
+<div class="display"><div class="dl">DISPLAY — JSON FORMAT / BEAUTIFY</div><div class="dt">Paste JSON in INPUT, then press RUN (or Ctrl+Enter).</div></div>
+  <div class="frow"><div class="flabel">INPUT</div><div class="fbox tall">{"name":"DevTextTools","version":"0.6.1","tools":238,"offline":true,"tags":["text","json","hash"]}</div></div>
+  <div class="frow"><div class="flabel">PARAMETER</div><div class="fbox" style="color:#666">— no parameter for this tool —</div></div>
+  <div class="frow"><div class="flabel">OUTPUT</div><div class="fbox out">{
+  "name": "DevTextTools",
+  "version": "0.6.1",
+  "tools": 238,
+  "offline": true,
+  "tags": [
+    "text",
+    "json",
+    "hash"
+  ]
+}</div></div>
+  
+<div class="btnrow">
+  <button class="btn green">RUN</button>
+  <button class="btn">OUTPUT → INPUT</button>
+  <button class="btn">COPY OUTPUT</button>
+  <button class="btn">UNDO</button>
+  <button class="btn">REDO</button>
+  <button class="btn red">CLEAR</button>
+  <span class="hint">Ctrl+Enter = Run</span>
+</div>
+</div>
+
+<div class="rail wide">
+  <div class="h">HISTORY (3)</div>
+  <div class="expl">Recent runs, newest first. Every run (window or command line) is kept here. RE-OPEN loads the tool with its input restored.</div>
+  <div><button class="clearlog">CLEAR HISTORY</button></div>
+  <div class="entry"><span class="et">2026-10-25 22:58</span><span class="en">JWT Builder / Signer</span><button class="eb">RE-OPEN</button>
+    <div class="ed">Input: {"sub":"42","name":"Ada"}
+Result: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…</div></div>
+  <div class="entry"><span class="et">2026-10-25 22:54</span><span class="en">Base64 Decode</span><button class="eb">RE-OPEN</button>
+    <div class="ed">Input: RGV2VGV4dFRvb2xz
+Result: DevTextTools</div></div>
+  <div class="entry"><span class="et">2026-10-25 22:51</span><span class="en">Sort Lines A→Z</span><button class="eb">RE-OPEN</button>
+    <div class="ed">Input: pear / apple / kiwi
+Result: apple / kiwi / pear</div></div>
+</div>
+</div></div></body></html>

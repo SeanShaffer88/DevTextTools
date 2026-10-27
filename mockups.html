@@ -1,0 +1,225 @@
+<style>
+  * { box-sizing: border-box; }
+  .dt-wrap { font-family: "Segoe UI", system-ui, sans-serif; color: var(--hatch-widget-text); }
+  .dt-intro { color: var(--hatch-widget-muted); font-size: 13px; margin: 2px 0 14px; }
+  .dt-sec { margin: 0 0 26px; }
+  .dt-head { display: flex; align-items: baseline; gap: 10px; margin: 0 0 8px; flex-wrap: wrap; }
+  .dt-num { background: #e5484d; color: #fff; font-weight: 700; border-radius: 6px; padding: 1px 9px; font-size: 14px; }
+  .dt-name { font-size: 17px; font-weight: 700; }
+  .dt-tag { color: var(--hatch-widget-muted); font-size: 13px; }
+  .dt-note { color: var(--hatch-widget-muted); font-size: 12.5px; margin-top: 7px; }
+  .dt-note b { color: var(--hatch-widget-text); }
+  .win { border: 1px solid #3a3a3a; border-radius: 10px; overflow: hidden; background: #0a0a0a; color: #e8e8e8; font-size: 12.5px; box-shadow: 0 4px 18px rgba(0,0,0,.35); }
+  .tbar { display: flex; align-items: center; gap: 8px; background: #161616; padding: 6px 10px; border-bottom: 1px solid #2c2c2c; }
+  .tbar .app { color: #e5484d; font-weight: 700; font-size: 13.5px; }
+  .tbar .sub { color: #9a9a9a; font-size: 11.5px; }
+  .tbar .winbtns { margin-left: auto; color: #9a9a9a; letter-spacing: 6px; font-size: 11px; }
+  .sbox { margin-left: auto; background: #050505; border: 1px solid #333; border-radius: 5px; color: #bbb; padding: 3px 10px; font-size: 11.5px; min-width: 170px; }
+  .menurow { display: flex; gap: 2px; flex-wrap: wrap; background: #101010; padding: 5px 8px; border-bottom: 1px solid #2c2c2c; position: relative; }
+  .mi { padding: 3px 8px; border-radius: 5px; color: #d8d8d8; white-space: nowrap; }
+  .mi.hot { background: #6b0700; color: #fff; }
+  .dropdown { position: absolute; top: 32px; left: 372px; background: #1c1c1c; border: 1px solid #444; border-radius: 7px; padding: 5px; width: 196px; z-index: 5; box-shadow: 0 10px 24px rgba(0,0,0,.55); }
+  .dropdown div { padding: 4px 9px; border-radius: 4px; color: #ddd; }
+  .dropdown .sel { background: #6b0700; color: #fff; }
+  .panes { display: flex; gap: 10px; padding: 10px; }
+  .pane { flex: 1; min-width: 0; }
+  .pane .lab { font-weight: 700; margin-bottom: 4px; color: #f0f0f0; }
+  .pane .box { background: #050505; border: 1px solid #2c2c2c; border-radius: 6px; padding: 8px 10px; font-family: Consolas, monospace; font-size: 11.8px; line-height: 1.5; height: 128px; overflow: hidden; white-space: pre-wrap; word-break: break-word; }
+  .cmdbar { display: flex; gap: 7px; flex-wrap: wrap; padding: 8px 10px; border-top: 1px solid #2c2c2c; background: #101010; }
+  .btn { background: #262626; border: 1px solid #3d3d3d; color: #eee; border-radius: 6px; padding: 4px 11px; font-size: 12px; }
+  .btn.primary { background: #6b0700; border-color: #a01218; font-weight: 700; }
+  .btn.ghost { background: transparent; }
+  .k { color: #7ee0a3; } .s { color: #e5c07b; } .n { color: #61afef; } .p { color: #c678dd; }
+  /* ribbon */
+  .tabs { display: flex; gap: 2px; flex-wrap: wrap; background: #101010; padding: 6px 8px 0; }
+  .tab { padding: 5px 10px; color: #bbb; border-radius: 6px 6px 0 0; white-space: nowrap; }
+  .tab.on { background: #1d1d1d; color: #fff; border-bottom: 2px solid #e5484d; }
+  .ribbon { display: flex; gap: 14px; background: #1d1d1d; padding: 9px 12px; border-bottom: 1px solid #2c2c2c; flex-wrap: wrap; }
+  .rgroup { display: flex; gap: 6px; align-items: stretch; }
+  .rbtn { background: #282828; border: 1px solid #3d3d3d; border-radius: 7px; color: #eee; padding: 7px 10px; text-align: center; font-size: 12px; }
+  .rbtn.big { padding: 7px 14px; font-weight: 700; background: #6b0700; border-color: #a01218; }
+  .rsep { width: 1px; background: #3a3a3a; }
+  .rgrouplab { font-size: 10px; color: #999; text-align: center; margin-top: 3px; }
+  /* hub */
+  .hubsearch { display: block; margin: 12px auto 4px; width: 62%; background: #050505; border: 1px solid #3a3a3a; border-radius: 8px; padding: 7px 12px; color: #bbb; font-size: 12.5px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 10px; }
+  .card { background: #141414; border: 1px solid #2c2c2c; border-radius: 8px; padding: 8px 10px; }
+  .card .ct { font-weight: 700; color: #fff; }
+  .card .cc { color: #999; font-size: 11px; }
+  .card.open { border-color: #a01218; background: #1a0d0d; }
+  .chips { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+  .chip { background: #262626; border: 1px solid #3d3d3d; border-radius: 20px; padding: 2px 9px; font-size: 11px; color: #eee; }
+  .chip.sel { background: #6b0700; border-color: #a01218; }
+  /* explorer */
+  .xbody { display: flex; min-height: 218px; }
+  .tree { width: 196px; flex: none; background: #101010; border-right: 1px solid #2c2c2c; padding: 8px 6px; font-size: 12px; }
+  .tree .cat { color: #e5484d; font-weight: 700; padding: 3px 6px; }
+  .tree .it { padding: 3px 6px 3px 20px; color: #ccc; border-radius: 4px; }
+  .tree .it.sel { background: #6b0700; color: #fff; }
+  .xmain { flex: 1; min-width: 0; padding: 10px; }
+  .toolhead { font-size: 15px; font-weight: 700; }
+  .tooldesc { color: #9a9a9a; font-size: 11.8px; margin: 2px 0 8px; }
+  /* palette */
+  .palbar { margin: 14px auto 6px; width: 72%; background: #101010; border: 1px solid #555; border-radius: 9px; padding: 10px 14px; font-family: Consolas, monospace; font-size: 13.5px; color: #eee; box-shadow: 0 0 0 3px rgba(229,72,77,.25); }
+  .palbar .prompt { color: #e5484d; font-weight: 700; }
+  .favs { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; padding: 4px 10px 2px; }
+  /* light */
+  .win.light { background: #f4f4f5; color: #1d1d1f; border-color: #c9c9ce; }
+  .win.light .tbar { background: #e9e9ec; border-color: #d4d4d8; }
+  .win.light .tbar .sub, .win.light .tbar .winbtns { color: #6d6d72; }
+  .win.light .menurow { background: #ececef; border-color: #d4d4d8; }
+  .win.light .mi { color: #26262a; }
+  .win.light .mi.hot { background: #d92d20; color: #fff; }
+  .win.light .sbox { background: #fff; border-color: #c9c9ce; color: #55555c; }
+  .win.light .pane .lab { color: #1d1d1f; }
+  .win.light .pane .box { background: #fff; border-color: #d4d4d8; }
+  .win.light .cmdbar { background: #ececef; border-color: #d4d4d8; }
+  .win.light .btn { background: #fff; border-color: #c9c9ce; color: #26262a; }
+  .win.light .btn.primary { background: #d92d20; border-color: #b42318; color: #fff; }
+  .win.light .k { color: #067647; } .win.light .s { color: #b54708; } .win.light .n { color: #175cd3; } .win.light .p { color: #6941c6; }
+</style>
+
+<div class="dt-wrap">
+  <div class="dt-intro">Six design directions for DevTextTools, all showing the same moment: <b>JSON Formatter</b> selected, sample JSON in, formatted JSON out. Reply with the number (or name) you want built.</div>
+
+  <!-- 1 -->
+  <div class="dt-sec">
+    <div class="dt-head"><span class="dt-num">1</span><span class="dt-name">Menu Classic</span><span class="dt-tag">— your spec, already built as v0.3.2</span></div>
+    <div class="win">
+      <div class="tbar"><span class="app">DevTextTools</span><span class="sub">208 tools · fully offline</span><span class="sbox">Search tools: json…</span><span class="winbtns">— ▢ ✕</span></div>
+      <div class="menurow">
+        <span class="mi">Case ▾</span><span class="mi">Lines ▾</span><span class="mi">Transform ▾</span><span class="mi">Analyse ▾</span><span class="mi">Encode / Decode ▾</span><span class="mi hot">Developer / Format ▾</span><span class="mi">Hash / Crypto ▾</span><span class="mi">Generators ▾</span><span class="mi">Fancy Text ▾</span><span class="mi">Converters ▾</span><span class="mi">Calculators ▾</span><span class="mi">Date &amp; Time ▾</span><span class="mi">Files ▾</span>
+        <div class="dropdown"><div class="sel">✓ JSON Formatter</div><div>JSON Validator</div><div>JSON Minifier</div><div>JSON → CSV</div><div>JSON → XML</div><div>XML Formatter</div><div>SQL Formatter</div><div>JWT Decoder</div><div>Regex Tester</div></div>
+      </div>
+      <div class="panes" style="margin-top:118px">
+        <div class="pane"><div class="lab">Input</div><div class="box">{"name":"sean","tools":208,"offline":true}</div></div>
+        <div class="pane"><div class="lab">Output</div><div class="box">{
+  <span class="s">"name"</span>: <span class="k">"sean"</span>,
+  <span class="s">"tools"</span>: <span class="n">208</span>,
+  <span class="s">"offline"</span>: <span class="p">true</span>
+}</div></div>
+      </div>
+      <div class="cmdbar"><span class="btn primary">▶ Run tool</span><span class="btn">Output → Input</span><span class="btn">Copy output</span><span class="btn">Clear</span><span class="btn ghost">Open file…</span><span class="btn ghost">PDF Info…</span><span class="btn ghost">Merge PDFs…</span></div>
+    </div>
+    <div class="dt-note"><b>How it works:</b> category dropdowns across the upper panel, input/output in the middle, every command button in a bar under the fields. <b>Best for:</b> a familiar, menu-driven desktop feel — nothing hidden, everything one or two clicks away.</div>
+  </div>
+
+  <!-- 2 -->
+  <div class="dt-sec">
+    <div class="dt-head"><span class="dt-num">2</span><span class="dt-name">Ribbon Studio</span><span class="dt-tag">— category tabs + a ribbon of tool buttons</span></div>
+    <div class="win">
+      <div class="tbar"><span class="app">DevTextTools</span><span class="sub">208 tools · fully offline</span><span class="sbox">Search tools…</span><span class="winbtns">— ▢ ✕</span></div>
+      <div class="tabs"><span class="tab">Case</span><span class="tab">Lines</span><span class="tab">Transform</span><span class="tab">Analyse</span><span class="tab">Encode</span><span class="tab on">Developer / Format</span><span class="tab">Hash</span><span class="tab">Generators</span><span class="tab">Fancy</span><span class="tab">Converters</span><span class="tab">Calculators</span><span class="tab">Files</span></div>
+      <div class="ribbon">
+        <div><div class="rgroup"><span class="rbtn big">Format<br>JSON</span><span class="rbtn">Validate</span><span class="rbtn">Minify</span></div><div class="rgrouplab">JSON</div></div>
+        <div class="rsep"></div>
+        <div><div class="rgroup"><span class="rbtn">JSON → CSV</span><span class="rbtn">JSON → XML</span><span class="rbtn">JSON → YAML</span></div><div class="rgrouplab">Convert</div></div>
+        <div class="rsep"></div>
+        <div><div class="rgroup"><span class="rbtn">XML Format</span><span class="rbtn">SQL Format</span><span class="rbtn">JWT Decode</span><span class="rbtn">Regex Test</span></div><div class="rgrouplab">More</div></div>
+      </div>
+      <div class="panes">
+        <div class="pane"><div class="lab">Input</div><div class="box">{"name":"sean","tools":208,"offline":true}</div></div>
+        <div class="pane"><div class="lab">Output</div><div class="box">{
+  <span class="s">"name"</span>: <span class="k">"sean"</span>,
+  <span class="s">"tools"</span>: <span class="n">208</span>,
+  <span class="s">"offline"</span>: <span class="p">true</span>
+}</div></div>
+      </div>
+      <div class="cmdbar"><span class="btn primary">▶ Run</span><span class="btn">Output → Input</span><span class="btn">Copy</span><span class="btn">Clear</span></div>
+    </div>
+    <div class="dt-note"><b>How it works:</b> like a word processor's ribbon — pick a category tab, its tools appear as big labelled buttons, no menus to open. <b>Best for:</b> discovering tools and one-click running; costs some vertical space for the ribbon.</div>
+  </div>
+
+  <!-- 3 -->
+  <div class="dt-sec">
+    <div class="dt-head"><span class="dt-num">3</span><span class="dt-name">Hub Grid</span><span class="dt-tag">— a home page of tool cards, workspace below</span></div>
+    <div class="win">
+      <div class="tbar"><span class="app">DevTextTools</span><span class="sub">208 tools · fully offline</span><span class="winbtns">— ▢ ✕</span></div>
+      <span class="hubsearch">Search 208 tools…&nbsp;&nbsp;(try “json”, “sha”, “roman”, “subnet”)</span>
+      <div class="grid">
+        <div class="card"><div class="ct">Case</div><div class="cc">12 tools</div></div>
+        <div class="card"><div class="ct">Lines</div><div class="cc">20 tools</div></div>
+        <div class="card"><div class="ct">Encode / Decode</div><div class="cc">22 tools</div></div>
+        <div class="card"><div class="ct">Hash / Crypto</div><div class="cc">8 tools</div></div>
+        <div class="card open"><div class="ct">Developer / Format</div><div class="cc">26 tools</div>
+          <div class="chips"><span class="chip sel">JSON Formatter</span><span class="chip">JSON Validator</span><span class="chip">XML Formatter</span><span class="chip">JWT Decoder</span><span class="chip">Regex Tester</span><span class="chip">+21</span></div></div>
+        <div class="card"><div class="ct">Converters</div><div class="cc">27 tools</div></div>
+        <div class="card"><div class="ct">Calculators</div><div class="cc">29 tools</div></div>
+        <div class="card"><div class="ct">Files &amp; PDF</div><div class="cc">5 tools</div></div>
+      </div>
+      <div class="panes" style="padding-top:0">
+        <div class="pane"><div class="lab">JSON Formatter — Input</div><div class="box" style="height:74px">{"name":"sean","tools":208,"offline":true}</div></div>
+        <div class="pane"><div class="lab">Output</div><div class="box" style="height:74px">{ <span class="s">"name"</span>: <span class="k">"sean"</span>, <span class="s">"tools"</span>: <span class="n">208</span>, <span class="s">"offline"</span>: <span class="p">true</span> }</div></div>
+      </div>
+      <div class="cmdbar"><span class="btn primary">▶ Run tool</span><span class="btn">Output → Input</span><span class="btn">Copy output</span><span class="btn">Clear</span></div>
+    </div>
+    <div class="dt-note"><b>How it works:</b> the window opens on a browsable home of category cards; clicking a card unfolds its tools as chips, and the workspace lives underneath. <b>Best for:</b> seeing everything the program can do at a glance; the workspace is shorter until a tool is picked.</div>
+  </div>
+
+  <!-- 4 -->
+  <div class="dt-sec">
+    <div class="dt-head"><span class="dt-num">4</span><span class="dt-name">Explorer</span><span class="dt-tag">— category tree on the left, workspace on the right</span></div>
+    <div class="win">
+      <div class="tbar"><span class="app">DevTextTools</span><span class="sub">208 tools · fully offline</span><span class="sbox">Search tools…</span><span class="winbtns">— ▢ ✕</span></div>
+      <div class="xbody">
+        <div class="tree">
+          <div class="cat">▸ Case</div><div class="cat">▸ Lines</div><div class="cat">▸ Encode / Decode</div>
+          <div class="cat">▾ Developer / Format</div>
+          <div class="it sel">JSON Formatter</div><div class="it">JSON Validator</div><div class="it">JSON Minifier</div><div class="it">JSON → CSV</div><div class="it">XML Formatter</div><div class="it">JWT Decoder</div><div class="it">Regex Tester</div>
+          <div class="cat">▸ Hash / Crypto</div><div class="cat">▸ Converters</div><div class="cat">▸ Files</div>
+        </div>
+        <div class="xmain">
+          <div class="toolhead">JSON Formatter</div>
+          <div class="tooldesc">Pretty-print JSON with consistent indentation. Parameter: indent spaces (default 2).</div>
+          <div class="panes" style="padding:0">
+            <div class="pane"><div class="lab">Input</div><div class="box" style="height:96px">{"name":"sean","tools":208,"offline":true}</div></div>
+            <div class="pane"><div class="lab">Output</div><div class="box" style="height:96px">{ <span class="s">"name"</span>: <span class="k">"sean"</span>, <span class="s">"tools"</span>: <span class="n">208</span> … }</div></div>
+          </div>
+          <div class="cmdbar" style="border:0;background:transparent;padding:8px 0 0"><span class="btn primary">▶ Run tool</span><span class="btn">Output → Input</span><span class="btn">Copy output</span><span class="btn">Clear</span><span class="btn ghost">PDF Info…</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="dt-note"><b>How it works:</b> the classic two-pane layout (the original v0.1 shape, polished) — categories expand in a tree, tools stay visible while you work. <b>Best for:</b> hopping between tools in the same category; the tree takes width from the text fields.</div>
+  </div>
+
+  <!-- 5 -->
+  <div class="dt-sec">
+    <div class="dt-head"><span class="dt-num">5</span><span class="dt-name">Command Palette</span><span class="dt-tag">— keyboard-first, search is the whole interface</span></div>
+    <div class="win">
+      <div class="tbar"><span class="app">DevTextTools</span><span class="sub">208 tools · fully offline</span><span class="winbtns">— ▢ ✕</span></div>
+      <div class="palbar"><span class="prompt">&gt;</span> json for▍<span style="color:#999">— JSON Formatter · Developer / Format · Enter to open</span></div>
+      <div class="favs"><span class="chip sel">★ JSON Formatter</span><span class="chip">★ SHA-256 Hash</span><span class="chip">★ Base64 Encode</span><span class="chip">Recent: Subnet Calculator</span><span class="chip">Recent: PDF Info</span></div>
+      <div class="panes">
+        <div class="pane"><div class="lab">Input</div><div class="box">{"name":"sean","tools":208,"offline":true}</div></div>
+        <div class="pane"><div class="lab">Output</div><div class="box">{
+  <span class="s">"name"</span>: <span class="k">"sean"</span>,
+  <span class="s">"tools"</span>: <span class="n">208</span>,
+  <span class="s">"offline"</span>: <span class="p">true</span>
+}</div></div>
+      </div>
+      <div class="cmdbar"><span class="btn primary">▶ Run (Ctrl+Enter)</span><span class="btn">Chain</span><span class="btn">Copy</span><span class="btn">Clear</span><span style="margin-left:auto;color:#999">Ctrl+K jumps to the command bar from anywhere</span></div>
+    </div>
+    <div class="dt-note"><b>How it works:</b> one big command bar rules the app — type a few letters, hit Enter, the tool opens; favourites and recents sit under it as chips. <b>Best for:</b> speed when you know what you want; browsing by category is weaker.</div>
+  </div>
+
+  <!-- 6 -->
+  <div class="dt-sec">
+    <div class="dt-head"><span class="dt-num">6</span><span class="dt-name">Light Studio</span><span class="dt-tag">— the Menu Classic layout in a bright theme</span></div>
+    <div class="win light">
+      <div class="tbar"><span class="app">DevTextTools</span><span class="sub">208 tools · fully offline</span><span class="sbox">Search tools…</span><span class="winbtns">— ▢ ✕</span></div>
+      <div class="menurow"><span class="mi">Case ▾</span><span class="mi">Lines ▾</span><span class="mi">Transform ▾</span><span class="mi">Analyse ▾</span><span class="mi">Encode / Decode ▾</span><span class="mi hot">Developer / Format ▾</span><span class="mi">Hash / Crypto ▾</span><span class="mi">Generators ▾</span><span class="mi">Fancy Text ▾</span><span class="mi">Converters ▾</span><span class="mi">Calculators ▾</span><span class="mi">Files ▾</span></div>
+      <div class="panes">
+        <div class="pane"><div class="lab">Input</div><div class="box">{"name":"sean","tools":208,"offline":true}</div></div>
+        <div class="pane"><div class="lab">Output</div><div class="box">{
+  <span class="s">"name"</span>: <span class="k">"sean"</span>,
+  <span class="s">"tools"</span>: <span class="n">208</span>,
+  <span class="s">"offline"</span>: <span class="p">true</span>
+}</div></div>
+      </div>
+      <div class="cmdbar"><span class="btn primary">▶ Run tool</span><span class="btn">Output → Input</span><span class="btn">Copy output</span><span class="btn">Clear</span><span class="btn">PDF Info…</span><span class="btn">Merge PDFs…</span></div>
+    </div>
+    <div class="dt-note"><b>How it works:</b> identical layout to #1, but a bright studio theme — white fields, light panels, same red accent. <b>Best for:</b> bright rooms and anyone who finds the black theme heavy; breaks the family black/red look.</div>
+  </div>
+
+  <div class="dt-intro">My recommendation: <b>#1 Menu Classic</b> if you like what you specced (it's already built), <b>#2 Ribbon Studio</b> if you'd rather see tools as buttons than menus. #5 is the fastest once learned. Reply with a number and I'll make that the design.</div>
+</div>

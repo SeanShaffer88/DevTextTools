@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MSI source for DevTextTools (built with wixl from msitools).
+     Per-user install into %LOCALAPPDATA%\Programs\DevTextTools, with a
+     Start Menu shortcut. Build from a staging folder that contains
+     DevTextTools.exe, LICENSE and README.md next to this file, with
+     wixl, architecture x64, output DevTextTools-Setup-x86_64.msi.
+     The GUIDs below are stable for this product: never change the
+     UpgradeCode, or upgrades stop replacing the old version.
+     Note: wixl supports only a subset of WiX - no ComponentGroup, and
+     RemoveFolder takes no Directory attribute here. -->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="DevTextTools" Language="1033" Version="0.7.1"
+           Manufacturer="Sean Shaffer" UpgradeCode="919E5C79-15DF-4144-B534-45567E14E106">
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perUser"
+             Description="DevTextTools - every text and dev tool, offline" />
+    <MediaTemplate EmbedCab="yes" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of DevTextTools is already installed." />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="LocalAppDataFolder">
+        <Directory Id="ProgramsDir" Name="Programs">
+          <Directory Id="INSTALLFOLDER" Name="DevTextTools">
+            <Component Id="MainExe" Guid="F1613426-2BD2-436A-A272-8F479553D717">
+              <File Id="DevTextToolsExe" Source="DevTextTools.exe" KeyPath="yes" />
+            </Component>
+            <Component Id="LicenseFile" Guid="F3873738-F398-4219-94F1-B9D55CB0ED29">
+              <File Id="LicenseTxt" Source="LICENSE" KeyPath="yes" />
+            </Component>
+            <Component Id="ReadmeFile" Guid="D9148430-D5C3-4D2B-A8F6-0AAB4AF1538F">
+              <File Id="ReadmeMd" Source="README.md" KeyPath="yes" />
+            </Component>
+          </Directory>
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="AppProgramMenuDir" Name="DevTextTools">
+          <Component Id="AppShortcut" Guid="DD27062F-C6AA-4FA0-B95A-6F35495E1824">
+            <Shortcut Id="AppStartMenuShortcut" Name="DevTextTools"
+                      Description="Every text and dev tool, offline"
+                      Target="[INSTALLFOLDER]DevTextTools.exe"
+                      WorkingDirectory="INSTALLFOLDER" />
+            <RemoveFolder Id="CleanUpShortcut" On="uninstall" />
+            <RegistryValue Root="HKCU" Key="Software\DevTextTools" Name="installed"
+                           Type="integer" Value="1" KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <Feature Id="ProductFeature" Title="DevTextTools" Level="1">
+      <ComponentRef Id="MainExe" />
+      <ComponentRef Id="LicenseFile" />
+      <ComponentRef Id="ReadmeFile" />
+      <ComponentRef Id="AppShortcut" />
+    </Feature>
+  </Product>
+</Wix>

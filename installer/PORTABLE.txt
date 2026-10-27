@@ -1,0 +1,9 @@
+DevTextTools — portable build
+
+Just run DevTextTools.exe. Nothing is installed, nothing is written to your
+PC by the program, and no internet is used. Delete the folder to remove it.
+
+The program is free (MIT license, see LICENSE). The binary is unsigned —
+Windows may warn on first run; choose More info, then Run anyway, if you
+trust this build. You can check the file's SHA-256 against the release
+notes where you downloaded it.
