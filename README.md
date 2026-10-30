@@ -19,7 +19,7 @@ Imagine you keep visiting ten different websites whenever you need to fix up som
 
 ## Features in detail
 
-All screenshots below are real captures from the author's Windows PC running v0.6.1 — no mockups, no placeholders. The window was restyled in v0.7.0 (Terminal design: green accent, monospace text, History rail) and refined in v0.7.1 (toolbars that stretch to fill their space and a minimum window size), so the layout in these captures differs from the current build; new captures are to be added.
+All screenshots below are real captures from the author's Windows PC running v0.6.1 — no mockups, no placeholders. The window was restyled in v0.7.0 (Terminal design: green accent, monospace text, History rail) and refined in v0.7.1 (toolbars that stretch to fill their space and a minimum window size) and v0.7.2 (button rows sized by label width, so no button is cut off), so the layout in these captures differs from the current build; new captures are to be added.
 
 ### The Tools workspace
 
@@ -156,7 +156,7 @@ echo 255 | devtexttools conv-base --param 10|||16
 ## Verified status
 
 - Core library + all tools: **Partially Verified** — the full test suite passes in the development environment (40 tests at v0.6.1) and every tool is also exercised from the command line.
-- Windows `.exe`: **Verified on the author's machine** — every view (Tools across all categories, Timers, Pipelines, Regex Lab, Replace, JSON Tree) is shown in the real captures above, taken on the author's Windows PC at v0.6.1. The v0.7.0 Terminal restyle was confirmed running on the author's machine; fresh captures, including the v0.7.1 refinements, are to be added.
+- Windows `.exe`: **Verified on the author's machine** — every view (Tools across all categories, Timers, Pipelines, Regex Lab, Replace, JSON Tree) is shown in the real captures above, taken on the author's Windows PC at v0.6.1. The v0.7.0 Terminal restyle and the v0.7.1 refinements were confirmed running on the author's machine (full capture set, 2026-10-27); that check found the ribbon overflow fixed in v0.7.2. Fresh captures of the current build are to be added.
 
 ## License
 
