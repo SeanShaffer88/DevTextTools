@@ -9,7 +9,7 @@
      Note: wixl supports only a subset of WiX - no ComponentGroup, and
      RemoveFolder takes no Directory attribute here. -->
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <Product Id="*" Name="DevTextTools" Language="1033" Version="0.7.1"
+  <Product Id="*" Name="DevTextTools" Language="1033" Version="0.7.2"
            Manufacturer="Sean Shaffer" UpgradeCode="919E5C79-15DF-4144-B534-45567E14E106">
     <Package InstallerVersion="200" Compressed="yes" InstallScope="perUser"
              Description="DevTextTools - every text and dev tool, offline" />
