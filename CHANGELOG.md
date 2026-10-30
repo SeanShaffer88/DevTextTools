@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.7.2] — 2026-10-27
+Button rows sized by label width — no button is cut off.
+
+- The tool ribbon, category chips, command bar and file/PDF button rows now measure every button's label and pack rows by real width: a row wraps to the next line before any button can run off the right edge, and the buttons in a row still stretch to fill the full width. (In v0.7.1 the rows were divided into equal slots; in categories with long tool names — Lines, Analyse, Developer / Format, Generators, Calculators, Fancy Text, Files — the last button in a row was cut off mid-label.)
+- Work tabs show the tool's full name instead of cutting it at 18 characters; the tab row scrolls sideways when there are more tabs than fit.
+
 ## [0.7.1] — 2026-10-25
 Toolbar stretching and resize safety.
 
