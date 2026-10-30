@@ -27,7 +27,7 @@ Section "Install"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\DevTextTools" "DisplayName" "DevTextTools"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\DevTextTools" "UninstallString" "$INSTDIR\Uninstall.exe"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\DevTextTools" "DisplayVersion" "0.7.1"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\DevTextTools" "DisplayVersion" "0.7.2"
 SectionEnd
 
 Section "Uninstall"
