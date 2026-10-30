@@ -594,11 +594,61 @@ impl Default for App {
     }
 }
 
-/// Width for each of `n` equal items so a row fills the available width.
-fn fill_width(ui: &egui::Ui, n: usize) -> f32 {
-    let n = n.max(1);
+/// Measured minimum width of a button showing `text`: the label's
+/// laid-out width plus the button's own horizontal padding and a
+/// small safety margin, so a row built from these minimums can
+/// never push a button off the edge of the window.
+fn btn_min_width(ui: &egui::Ui, text: &str) -> f32 {
+    let font = egui::TextStyle::Button.resolve(ui.style());
+    let text_w = ui
+        .painter()
+        .layout_no_wrap(text.to_string(), font, egui::Color32::WHITE)
+        .size()
+        .x;
+    text_w + ui.spacing().button_padding.x * 2.0 + 8.0
+}
+
+/// Widths for one row of buttons: every button gets its measured
+/// minimum plus an equal share of the leftover space, so the row
+/// fills the available width exactly AND every label fits in full.
+/// (v0.7.1 divided rows into plain equal slots; with a long tool
+/// name the slot was narrower than the label, the button refused
+/// to shrink below its text, and the last button in the row slid
+/// off the right edge — found in the v0.7.1 field check.)
+fn row_widths(ui: &egui::Ui, labels: &[&str]) -> Vec<f32> {
+    let n = labels.len().max(1);
     let spacing = ui.spacing().item_spacing.x;
-    ((ui.available_width() - spacing * (n - 1) as f32) / n as f32).max(30.0)
+    let avail = ui.available_width();
+    let mins: Vec<f32> = labels.iter().map(|t| btn_min_width(ui, t)).collect();
+    let used: f32 = mins.iter().sum::<f32>() + spacing * (n - 1) as f32;
+    let slack = ((avail - used) / n as f32).max(0.0);
+    mins.iter().map(|m| (m + slack).min(avail)).collect()
+}
+
+/// Group item indexes into rows for a button strip: a new row
+/// starts when the row reaches the usual density (about `target`
+/// px per item) or when the next item's minimum width would push
+/// the row past the available width — whichever comes first.
+fn pack_rows(ui: &egui::Ui, labels: &[&str], target: f32) -> Vec<Vec<usize>> {
+    let spacing = ui.spacing().item_spacing.x;
+    let avail = ui.available_width();
+    let cap = per_row(ui, target);
+    let mut rows: Vec<Vec<usize>> = Vec::new();
+    let mut row: Vec<usize> = Vec::new();
+    let mut row_min = 0.0_f32;
+    for (i, t) in labels.iter().enumerate() {
+        let m = btn_min_width(ui, t);
+        if !row.is_empty() && (row.len() >= cap || row_min + spacing + m > avail) {
+            rows.push(std::mem::take(&mut row));
+            row_min = 0.0;
+        }
+        row_min += if row.is_empty() { m } else { spacing + m };
+        row.push(i);
+    }
+    if !row.is_empty() {
+        rows.push(row);
+    }
+    rows
 }
 
 /// How many items per row so each gets about `target` px (at least 1).
@@ -889,9 +939,17 @@ impl App {
     #[cfg(windows)]
     fn file_buttons(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            let fw = fill_width(ui, 4);
+            let fws = row_widths(
+                ui,
+                &[
+                    "\u{1F4C2} Open file \u{2192} Input",
+                    "\u{1F4BE} Save output\u{2026}",
+                    "\u{1F4C2} Batch: run tool on files\u{2026}",
+                    "PDF path \u{2192} Input",
+                ],
+            );
             if ui
-                .add_sized([fw, 26.0], egui::Button::new("\u{1F4C2} Open file → Input"))
+                .add_sized([fws[0], 26.0], egui::Button::new("\u{1F4C2} Open file → Input"))
                 .on_hover_text("Open a text file and load its contents into the Input box (up to 10 MB).")
                 .clicked()
             {
@@ -911,7 +969,7 @@ impl App {
                 }
             }
             if ui
-                .add_sized([fw, 26.0], egui::Button::new("\u{1F4BE} Save output…"))
+                .add_sized([fws[1], 26.0], egui::Button::new("\u{1F4BE} Save output…"))
                 .on_hover_text("Save the Output box contents to a file.")
                 .clicked()
             {
@@ -927,7 +985,7 @@ impl App {
             }
             if ui
                 .add_sized(
-                    [fw, 26.0],
+                    [fws[2], 26.0],
                     egui::Button::new("\u{1F4C2} Batch: run tool on files\u{2026}"),
                 )
                 .on_hover_text("Run the selected tool on many files at once; one result file is written per input file.")
@@ -936,7 +994,7 @@ impl App {
                 self.batch_run();
             }
             if ui
-                .add_sized([fw, 26.0], egui::Button::new("PDF path → Input"))
+                .add_sized([fws[3], 26.0], egui::Button::new("PDF path → Input"))
                 .on_hover_text("Put a PDF file's path in the Input box, for the PDF tools.")
                 .clicked()
             {
@@ -952,9 +1010,17 @@ impl App {
             }
         });
         ui.horizontal(|ui| {
-            let pw = fill_width(ui, 4);
+            let pws = row_widths(
+                ui,
+                &[
+                    "PDF Info\u{2026}",
+                    "PDF \u{2192} Text\u{2026}",
+                    "Merge PDFs\u{2026}",
+                    "Split PDF\u{2026}",
+                ],
+            );
             if ui
-                .add_sized([pw, 26.0], egui::Button::new("PDF Info…"))
+                .add_sized([pws[0], 26.0], egui::Button::new("PDF Info…"))
                 .on_hover_text("Pick a PDF and show its page count, size and document details.")
                 .clicked()
             {
@@ -972,7 +1038,7 @@ impl App {
                 }
             }
             if ui
-                .add_sized([pw, 26.0], egui::Button::new("PDF \u{2192} Text…"))
+                .add_sized([pws[1], 26.0], egui::Button::new("PDF \u{2192} Text…"))
                 .on_hover_text("Pick a PDF and extract its text into the Output box.")
                 .clicked()
             {
@@ -990,7 +1056,7 @@ impl App {
                 }
             }
             if ui
-                .add_sized([pw, 26.0], egui::Button::new("Merge PDFs…"))
+                .add_sized([pws[2], 26.0], egui::Button::new("Merge PDFs…"))
                 .on_hover_text("Pick two or more PDFs and join them into one file.")
                 .clicked()
             {
@@ -1013,7 +1079,7 @@ impl App {
                 }
             }
             if ui
-                .add_sized([pw, 26.0], egui::Button::new("Split PDF…"))
+                .add_sized([pws[3], 26.0], egui::Button::new("Split PDF…"))
                 .on_hover_text("Pick a PDF and split it into one file per page.")
                 .clicked()
             {
@@ -1978,11 +2044,15 @@ impl eframe::App for App {
             let mut chip_cat: Option<String> = None;
             let mut chip_view: Option<View> = None;
             let cats: Vec<&(&str, Vec<(usize, &str)>)> = menu_data.iter().collect();
-            let per = per_row(ui, 150.0);
-            for chunk in cats.chunks(per) {
-                let w = fill_width(ui, chunk.len());
+            let cat_labels: Vec<&str> = cats.iter().map(|e| e.0).collect();
+            for row in pack_rows(ui, &cat_labels, 150.0) {
+                let row_labels: Vec<&str> = row.iter().map(|&i| cat_labels[i]).collect();
+                let widths = row_widths(ui, &row_labels);
+                let chunk: Vec<&(&str, Vec<(usize, &str)>)> =
+                    row.iter().map(|&i| cats[i]).collect();
                 ui.horizontal(|ui| {
-                    for (cat, items) in chunk {
+                    for (k, (cat, items)) in chunk.iter().enumerate() {
+                        let w = widths[k];
                         let active = self.view == View::Tools && self.active_cat == **cat;
                         let mut btn = egui::Button::new(*cat);
                         if active {
@@ -2003,14 +2073,21 @@ impl eframe::App for App {
             }
             // View chips: one stretched row of their own.
             ui.horizontal(|ui| {
-                let w = fill_width(ui, 5);
-                for (v, name) in [
+                let view_widths = row_widths(
+                    ui,
+                    &["Timers", "Pipelines", "Regex Lab", "Replace", "JSON Tree"],
+                );
+                for (k, (v, name)) in [
                     (View::Timers, "Timers"),
                     (View::Pipelines, "Pipelines"),
                     (View::RegexLab, "Regex Lab"),
                     (View::Replace, "Replace"),
                     (View::JsonTree, "JSON Tree"),
-                ] {
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    let w = view_widths[k];
                     let active = self.view == v;
                     let mut btn = egui::Button::new(name);
                     if active {
@@ -2100,11 +2177,17 @@ impl eframe::App for App {
                             if let Some((_, items)) =
                                 menu_data.iter().find(|(c, _)| *c == self.active_cat)
                             {
-                                let btns_per_row = per_row(ui, 168.0);
-                                for chunk in items.chunks(btns_per_row) {
-                                    let w = fill_width(ui, chunk.len());
+                                let tool_labels: Vec<&str> =
+                                    items.iter().map(|(_, n)| *n).collect();
+                                for row in pack_rows(ui, &tool_labels, 168.0) {
+                                    let row_labels: Vec<&str> =
+                                        row.iter().map(|&i| tool_labels[i]).collect();
+                                    let widths = row_widths(ui, &row_labels);
+                                    let chunk: Vec<&(usize, &str)> =
+                                        row.iter().map(|&i| &items[i]).collect();
                                     ui.horizontal(|ui| {
-                                        for (idx, name) in chunk {
+                                        for (k, (idx, name)) in chunk.iter().enumerate() {
+                                            let w = widths[k];
                                             let is_sel = selected_now == Some(*idx);
                                             let mut btn = egui::Button::new(*name);
                                             if is_sel {
@@ -2170,11 +2253,21 @@ impl eframe::App for App {
         // ===== Bottom panel: the command buttons =====
         egui::TopBottomPanel::bottom("commands").show(ctx, |ui| {
             ui.add_space(4.0);
-            let cw = fill_width(ui, 6);
+            let cmd_widths = row_widths(
+                ui,
+                &[
+                    "RUN  (Ctrl+Enter)",
+                    "Output \u{2192} Input (chain tools)",
+                    "Copy output",
+                    "\u{21A9} Undo",
+                    "\u{21AA} Redo",
+                    "Clear",
+                ],
+            );
             ui.horizontal(|ui| {
                 if ui
                     .add_sized(
-                        [cw, 28.0],
+                        [cmd_widths[0], 28.0],
                         egui::Button::new(
                             egui::RichText::new("RUN  (Ctrl+Enter)")
                                 .strong()
@@ -2188,7 +2281,7 @@ impl eframe::App for App {
                 }
                 if ui
                     .add_sized(
-                        [cw, 28.0],
+                        [cmd_widths[1], 28.0],
                         egui::Button::new("Output → Input (chain tools)"),
                     )
                     .on_hover_text("Feed the Output back into the Input box, to chain another tool onto the result.")
@@ -2199,7 +2292,7 @@ impl eframe::App for App {
                     self.output.clear();
                 }
                 if ui
-                    .add_sized([cw, 28.0], egui::Button::new("Copy output"))
+                    .add_sized([cmd_widths[2], 28.0], egui::Button::new("Copy output"))
                     .on_hover_text("Copy the Output box contents to the clipboard.")
                     .clicked()
                 {
@@ -2207,14 +2300,14 @@ impl eframe::App for App {
                     self.status = "Output copied".into();
                 }
                 if ui
-                    .add_sized([cw, 28.0], egui::Button::new("\u{21A9} Undo"))
+                    .add_sized([cmd_widths[3], 28.0], egui::Button::new("\u{21A9} Undo"))
                     .on_hover_text("Undo the last whole action (Run, Clear, chaining, drops).")
                     .clicked()
                 {
                     self.undo();
                 }
                 if ui
-                    .add_sized([cw, 28.0], egui::Button::new("\u{21AA} Redo"))
+                    .add_sized([cmd_widths[4], 28.0], egui::Button::new("\u{21AA} Redo"))
                     .on_hover_text("Redo an action you undid.")
                     .clicked()
                 {
@@ -2222,7 +2315,7 @@ impl eframe::App for App {
                 }
                 if ui
                     .add_sized(
-                        [cw, 28.0],
+                        [cmd_widths[5], 28.0],
                         egui::Button::new(egui::RichText::new("Clear").color(REDT)),
                     )
                     .on_hover_text(
@@ -2266,12 +2359,8 @@ impl eframe::App for App {
                         .and_then(|i| self.ops.get(i))
                         .map(|o| o.name)
                         .unwrap_or("New tab");
-                    let short: String = name.chars().take(18).collect();
                     if ui
-                        .add_sized(
-                            [120.0, 22.0],
-                            egui::Button::new(short).selected(n == self.tab_active),
-                        )
+                        .add(egui::Button::new(name).selected(n == self.tab_active))
                         .on_hover_text("Switch to this work tab. Each tab keeps its own tool and text.")
                         .clicked()
                     {
