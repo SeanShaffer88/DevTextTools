@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.8.0] — Unreleased
+## [0.8.0] — 2026-11-02
 Engineering-contract conformance release (tier t3). No tool behaviour changes except the two fixes noted; the work is where the program keeps its files, crash safety, and how it is built and released.
 
 - **Your files moved next to the program.** Settings and the new saved work session now live in a `data` folder beside `DevTextTools.exe` instead of `%LOCALAPPDATA%\DevTextTools`. On first run the old settings file is copied across (the original is left untouched); if the `data` folder cannot be written, the old location is used instead, so nothing is lost to a failed move. See [MIGRATION.md](MIGRATION.md). `DEVTEXTTOOLS_DATA_DIR` can point the data folder elsewhere.
