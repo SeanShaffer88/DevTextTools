@@ -1,0 +1,131 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and attach assets to (e.g. v0.8.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: x86_64-pc-windows-gnu
+      - name: Resolve version
+        id: meta
+        shell: pwsh
+        run: |
+          $tag = "${{ inputs.tag || github.ref_name }}"
+          $ver = $tag -replace '^v', ''
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "ver=$ver" >> $env:GITHUB_OUTPUT
+          Write-Host "Building release $tag (version $ver)"
+      - name: Gate
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --all-targets --locked -- -D warnings
+          cargo test --locked
+      - name: Prepare MinGW (gnu target linker + windres)
+        shell: pwsh
+        run: |
+          # The release build targets x86_64-pc-windows-gnu with the
+          # GCC MinGW toolchain (the project's proven route — see
+          # build-072-x64.sh). windows-latest ships MinGW-w64; find
+          # it, put it on PATH, and add prefixed-name copies
+          # (x86_64-w64-mingw32-gcc etc.) if only the plain names
+          # exist — cargo and build.rs ask for the prefixed ones.
+          $bin = $null
+          foreach ($c in @("C:\Program Files\mingw64\bin", "C:\msys64\mingw64\bin", "C:\mingw64\bin")) {
+            if (Test-Path "$c\gcc.exe") { $bin = $c; break }
+          }
+          if (-not $bin) {
+            $gcc = (Get-Command gcc.exe -ErrorAction SilentlyContinue).Source
+            if ($gcc) { $bin = Split-Path $gcc }
+          }
+          if (-not $bin) { throw "MinGW gcc.exe not found on this runner" }
+          Write-Host "MinGW bin: $bin"
+          $bin >> $env:GITHUB_PATH
+          $shim = Join-Path $env:RUNNER_TEMP "mingw-shims"
+          New-Item -ItemType Directory -Force -Path $shim | Out-Null
+          foreach ($tool in @("gcc", "g++", "windres")) {
+            $prefixed = "$bin\x86_64-w64-mingw32-$tool.exe"
+            if (-not (Test-Path $prefixed) -and (Test-Path "$bin\$tool.exe")) {
+              Copy-Item "$bin\$tool.exe" (Join-Path $shim "x86_64-w64-mingw32-$tool.exe")
+            }
+          }
+          $shim >> $env:GITHUB_PATH
+      - name: Build release (x86_64-pc-windows-gnu)
+        run: cargo build --release --locked --target x86_64-pc-windows-gnu
+      - name: Package installer (NSIS)
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.meta.outputs.tag }}"
+          $ver = "${{ steps.meta.outputs.ver }}"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          # The NSIS script embeds the exe from dist\DevTextTools.exe
+          # and is run from the installer folder (its paths are
+          # relative to it) — the same route as build-072-x64.sh.
+          Copy-Item target/x86_64-pc-windows-gnu/release/DevTextTools.exe "dist/DevTextTools.exe"
+          $makensis = (Get-Command makensis.exe -ErrorAction SilentlyContinue).Source
+          if (-not $makensis) {
+            $candidate = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+            if (Test-Path $candidate) { $makensis = $candidate }
+          }
+          if (-not $makensis) {
+            choco install nsis -y --no-progress
+            $makensis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          }
+          if (-not (Test-Path $makensis)) { throw "makensis.exe not found" }
+          Push-Location installer
+          & $makensis "/DAppVersion=$ver" "/DOUTFILE_NAME=../dist/DevTextTools-Setup.exe" "DevTextTools.nsi"
+          $nsisExit = $LASTEXITCODE
+          Pop-Location
+          if ($nsisExit -ne 0) { exit $nsisExit }
+          Remove-Item "dist/DevTextTools.exe"
+          Rename-Item "dist/DevTextTools-Setup.exe" "DevTextTools-$tag-x64-Setup.exe"
+          Get-ChildItem dist | Select-Object Name, Length
+      - name: Package portable zip
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.meta.outputs.tag }}"
+          New-Item -ItemType Directory -Force -Path "dist/portable" | Out-Null
+          Copy-Item target/x86_64-pc-windows-gnu/release/DevTextTools.exe "dist/portable/"
+          Copy-Item README.md "dist/portable/"
+          Copy-Item LICENSE "dist/portable/"
+          Copy-Item installer/PORTABLE.txt "dist/portable/"
+          Compress-Archive -Path "dist/portable/*" -DestinationPath "dist/DevTextTools-$tag-x64-Portable.zip"
+          Get-ChildItem dist | Select-Object Name, Length
+      - name: Write SHA256SUMS.txt
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.meta.outputs.tag }}"
+          $assets = @(
+            "DevTextTools-$tag-x64-Setup.exe",
+            "DevTextTools-$tag-x64-Portable.zip"
+          )
+          $lines = foreach ($name in $assets) {
+            $hash = (Get-FileHash "dist/$name" -Algorithm SHA256).Hash.ToLower()
+            "$hash  $name"
+          }
+          $lines | Set-Content "dist/SHA256SUMS.txt" -Encoding ascii
+          Get-Content "dist/SHA256SUMS.txt"
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          files: |
+            dist/DevTextTools-${{ steps.meta.outputs.tag }}-x64-Setup.exe
+            dist/DevTextTools-${{ steps.meta.outputs.tag }}-x64-Portable.zip
+            dist/SHA256SUMS.txt
