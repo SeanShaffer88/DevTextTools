@@ -223,7 +223,7 @@ fn stats(i: &str) -> Result<String, String> {
     let sum: f64 = v.iter().sum();
     let mean = sum / n;
     let mut sorted = v.clone();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    sorted.sort_by(|a, b| a.total_cmp(b));
     let median = if sorted.len() % 2 == 1 {
         sorted[sorted.len() / 2]
     } else {
@@ -241,7 +241,7 @@ fn stats(i: &str) -> Result<String, String> {
         }
     }
     counts.sort_by_key(|e| std::cmp::Reverse(e.1));
-    v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    v.sort_by(|a, b| a.total_cmp(b));
     Ok(format!("Count: {}\nSum: {}\nMean (average): {}\nMedian: {}\nMode: {} ({} times)\nMin: {}\nMax: {}\nRange: {}\nVariance (population): {}\nStandard deviation: {}", sorted.len(), trim_num(sum), trim_num(mean), trim_num(median), trim_num(counts[0].0 as f64 / 1e9), counts[0].1, trim_num(sorted[0]), trim_num(sorted[sorted.len() - 1]), trim_num(sorted[sorted.len() - 1] - sorted[0]), trim_num(var), trim_num(var.sqrt())))
 }
 fn primes(i: &str) -> Result<String, String> {
