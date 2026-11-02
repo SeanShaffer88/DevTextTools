@@ -15,15 +15,17 @@ Imagine you keep visiting ten different websites whenever you need to fix up som
 - **Work like a developer** — multiple **work tabs** (each keeps its own tool and text; the session is saved as you go and restored on the next launch, crash included), **Undo/Redo** for whole actions, **smart paste** that recognises JSON/JWTs/hashes/stack traces and offers the right tools, an opt-in **auto-run on paste**, a **snippet library**, **batch runs** over many files, a project-wide **find & replace** view with preview (every file it overwrites gets a `.bak` backup first), and a **JSON tree explorer** with copyable paths
 - **Same tools in a command line** — every tool also runs from a terminal (see *Command line* below), so scripts can use them too; there are no window-only tools
 - **Fully offline, private by design** — no account, no tracking code from us, no network calls; password and hash tools work on your machine only
-- **Free, no ads, no in-app purchases** — optional donations only, per the house rule for all of SEAN's software
+- **Free, no ads, no in-app purchases** — optional donations only
 
 ## Features in detail
 
-All screenshots below are real captures from the author's Windows PC running v0.6.1 — no mockups, no placeholders. The window was restyled in v0.7.0 (Terminal design: green accent, monospace text, History rail) and refined in v0.7.1 (toolbars that stretch to fill their space and a minimum window size) and v0.7.2 (button rows sized by label width, so no button is cut off), so the layout in these captures differs from the current build; new captures are to be added.
+All screenshots below are real captures from the author's Windows PC — no mockups, no placeholders. The first is the current build (v0.8.0). The remaining captures are from v0.6.1, before the v0.7.0 restyle (Terminal design: green accent, monospace text, History rail) and the v0.7.1/v0.7.2 toolbar refinements, so their layout differs from the current build; refreshed captures are being added.
 
 ### The Tools workspace
 
 Category tabs across the top, the category's tools as a ribbon of buttons underneath (tall categories scroll inside the ribbon), and a plain Input → Output workspace. Around it: a search box that filters tools as you type, multiple **work tabs** (each keeps its own tool and text), **Undo/Redo** for whole actions, **★ Favorites** and **◷ Recent** tabs, **Ctrl+K** quick-jump, a **snippet library** for reusable inputs, **smart paste** chips that recognise JSON/JWTs/hashes/stack traces and offer the matching tools, an opt-in **auto-run on paste**, **batch runs** over many files, and drag & drop (a dropped PDF shows its info).
+
+![The DevTextTools main window — Tools workspace, Case category (v0.8.0)](docs/screenshots/main-window.png)
 
 ![The Tools workspace — the Case category](docs/screenshots/tools-case.png)
 
