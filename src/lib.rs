@@ -9,6 +9,8 @@
 #![allow(clippy::possible_missing_else)]
 
 pub mod ops;
+pub mod paths;
+pub mod win32;
 
 pub use ops::{all_ops, find_op, run_op, Op};
 

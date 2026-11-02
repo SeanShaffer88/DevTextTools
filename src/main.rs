@@ -3,7 +3,7 @@
 //! operation registry, dispatched identically here, so there are no
 //! GUI-only features.
 
-use devtexttools::{all_ops, fmt_clock, run_op, Op};
+use devtexttools::{all_ops, fmt_clock, paths, run_op, Op};
 use std::io::Read;
 use std::time::{Duration, Instant};
 
@@ -33,6 +33,22 @@ fn fmt_ts(ts: i64) -> String {
         secs / 3600,
         (secs % 3600) / 60
     )
+}
+
+/// Overwrite the user file at `path` with `new`, safely: a
+/// `<name>.bak` backup of the current content is written beside
+/// it first, then the new content lands via temp file + rename
+/// in the same folder (see `paths::atomic_write`), so a crash
+/// mid-apply can never leave a half-written file and the
+/// original is always recoverable from the `.bak`. Returns
+/// false — the file is skipped — when either step fails.
+fn replace_write(path: &std::path::Path, new: &str) -> bool {
+    let mut bak = path.as_os_str().to_owned();
+    bak.push(".bak");
+    if std::fs::copy(path, std::path::PathBuf::from(bak)).is_err() {
+        return false;
+    }
+    paths::atomic_write(path, new.as_bytes()).is_ok()
 }
 
 impl App {
@@ -173,18 +189,38 @@ fn main() -> eframe::Result<()> {
     if !args.is_empty() {
         std::process::exit(cli(&args));
     }
+    // Single instance for window launches: a second window would
+    // race the first one's settings/session files (last save
+    // wins). The guard is held until the window closes. CLI runs
+    // never claim it (they exit above); --clean/--uninstall only
+    // probe it and refuse while it is held.
+    let _instance = match devtexttools::win32::acquire_single_instance() {
+        Some(guard) => guard,
+        None => {
+            println!("DevTextTools is already running.");
+            return Ok(());
+        }
+    };
+    // Restore the window's last position/size (saved in the
+    // settings file); a fresh install opens at the default size.
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_title("DevTextTools — every text & dev tool, offline")
+        .with_icon(std::sync::Arc::new(egui::IconData {
+            rgba: include_bytes!("../assets/icon-64.rgba").to_vec(),
+            width: 64,
+            height: 64,
+        }))
+        // Floor: below this the toolbars and editors would start to
+        // clip, so the window simply refuses to shrink any further.
+        .with_min_inner_size([1120.0, 640.0]);
+    viewport = match saved_window_geom() {
+        Some((x, y, w, h)) => viewport
+            .with_inner_size([w, h])
+            .with_position(egui::Pos2::new(x, y)),
+        None => viewport.with_inner_size([1180.0, 760.0]),
+    };
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title("DevTextTools — every text & dev tool, offline")
-            .with_icon(std::sync::Arc::new(egui::IconData {
-                rgba: include_bytes!("../assets/icon-64.rgba").to_vec(),
-                width: 64,
-                height: 64,
-            }))
-            .with_inner_size([1180.0, 760.0])
-            // Floor: below this the toolbars and editors would start to
-            // clip, so the window simply refuses to shrink any further.
-            .with_min_inner_size([1120.0, 640.0]),
+        viewport,
         ..Default::default()
     };
     eframe::run_native(
@@ -203,6 +239,48 @@ fn main() -> eframe::Result<()> {
 ///   devtexttools <tool-id> [--param <value>]   (input read from stdin)
 ///   devtexttools --search <word>
 fn cli(args: &[String]) -> i32 {
+    // `--json` is a modifier, valid with any command: lift it out
+    // first. It is never lifted when it directly follows `--param`
+    // (there it is the parameter's value, not a flag).
+    let mut json = false;
+    let mut rest: Vec<String> = Vec::new();
+    let mut after_param = false;
+    for a in args {
+        if after_param {
+            rest.push(a.clone());
+            after_param = false;
+        } else if a == "--param" {
+            after_param = true;
+            rest.push(a.clone());
+        } else if a == "--json" {
+            json = true;
+        } else {
+            rest.push(a.clone());
+        }
+    }
+    let args = &rest[..];
+    if args.is_empty() {
+        eprintln!("Usage: DevTextTools --help");
+        return 2;
+    }
+    if args[0] == "--version" || args[0] == "version" {
+        if json {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "ok": true,
+                    "name": "DevTextTools",
+                    "version": env!("CARGO_PKG_VERSION"),
+                })
+            );
+        } else {
+            println!("DevTextTools {}", env!("CARGO_PKG_VERSION"));
+        }
+        return 0;
+    }
+    if args[0] == "--clean" || args[0] == "--uninstall" {
+        return cli_purge(&args[1..], args[0] == "--uninstall", json);
+    }
     if args[0] == "--list" || args[0] == "list" {
         for op in all_ops() {
             println!("{:<28} [{}] {}", op.id, op.category, op.name);
@@ -223,7 +301,7 @@ fn cli(args: &[String]) -> i32 {
         return 0;
     }
     if args[0] == "--help" || args[0] == "help" || args[0] == "-h" {
-        println!("DevTextTools — every text & dev tool, offline.\n\nNo arguments: opens the window.\n--list                 list all tools\n--search <word>        find tools\n<tool-id> [--param X]  run a tool, text in via stdin, result to stdout");
+        println!("DevTextTools — every text & dev tool, offline.\n\nNo arguments: opens the window.\n--list                   list all tools\n--search <word>          find tools\n--version                print the version\n<tool-id> [--param X]    run a tool, text in via stdin, result to stdout\n--json                   with a tool run, --version or --clean/--uninstall: print the result as one JSON object\n--clean                  remove DevTextTools' own files (settings + saved session) from its data folder\n--uninstall              same as --clean; the program files themselves are removed by deleting the portable folder or via the installer\n  purge modifiers: --dry-run previews without removing anything, --silent skips the confirmation prompt");
         return 0;
     }
     if args[0] == "pdf-merge" {
@@ -289,14 +367,177 @@ fn cli(args: &[String]) -> i32 {
     // stdin input usually ends with a newline the user didn't mean as content for line tools; keep it — ops trim where it matters.
     match run_op(id, input.trim_end_matches(['\n', '\r']), &param) {
         Ok(out) => {
-            println!("{out}");
+            if json {
+                println!(
+                    "{}",
+                    serde_json::json!({"ok": true, "tool": id, "output": out})
+                );
+            } else {
+                println!("{out}");
+            }
             0
         }
         Err(e) => {
-            eprintln!("Error: {e}");
+            if json {
+                println!(
+                    "{}",
+                    serde_json::json!({"ok": false, "tool": id, "error": e})
+                );
+            } else {
+                eprintln!("Error: {e}");
+            }
             1
         }
     }
+}
+
+/// `--clean` / `--uninstall`: remove DevTextTools' own files
+/// (settings + saved work session) from the current data folder
+/// — nothing else is ever touched. Refuses while the window is
+/// open (the running instance holds the single-instance mutex).
+/// Without `--silent` it asks on stdin first (an empty answer,
+/// EOF, or anything but y/yes aborts); `--dry-run` only reports.
+fn cli_purge(args: &[String], uninstall: bool, json: bool) -> i32 {
+    let action = if uninstall { "uninstall" } else { "clean" };
+    let mut dry_run = false;
+    let mut silent = false;
+    for a in args {
+        match a.as_str() {
+            "--dry-run" => dry_run = true,
+            "--silent" => silent = true,
+            other => {
+                eprintln!(
+                    "Unknown {action} option '{other}'. Usage: DevTextTools --{action} [--dry-run] [--silent] [--json]"
+                );
+                return 2;
+            }
+        }
+    }
+    let fail = |msg: &str| -> i32 {
+        if json {
+            println!(
+                "{}",
+                serde_json::json!({"ok": false, "action": action, "error": msg})
+            );
+        } else {
+            eprintln!("Error: {msg}");
+        }
+        1
+    };
+    if devtexttools::win32::another_instance_running() {
+        return fail("DevTextTools is running — close the window first, then try again.");
+    }
+    let dir = paths::data_dir();
+    let candidates = paths::purge_candidates(&dir);
+    let names: Vec<String> = candidates
+        .iter()
+        .map(|p| {
+            p.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        })
+        .collect();
+    if candidates.is_empty() {
+        if json {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "ok": true,
+                    "action": action,
+                    "dry_run": dry_run,
+                    "data_dir": dir.display().to_string(),
+                    "removed": [],
+                })
+            );
+        } else {
+            println!(
+                "Nothing to remove — no DevTextTools files in {}",
+                dir.display()
+            );
+            if uninstall {
+                println!("To remove the program itself: delete the portable folder, or run the installer's Uninstall.exe.");
+            }
+        }
+        return 0;
+    }
+    if dry_run {
+        if json {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "ok": true,
+                    "action": action,
+                    "dry_run": true,
+                    "data_dir": dir.display().to_string(),
+                    "would_remove": names,
+                })
+            );
+        } else {
+            println!(
+                "Dry run — would remove {} file(s) from {}:",
+                candidates.len(),
+                dir.display()
+            );
+            for n in &names {
+                println!("  {n}");
+            }
+        }
+        return 0;
+    }
+    if !silent {
+        eprintln!(
+            "This removes {} DevTextTools file(s) from {}:",
+            candidates.len(),
+            dir.display()
+        );
+        for n in &names {
+            eprintln!("  {n}");
+        }
+        eprint!("Continue? [y/N] ");
+        let _ = std::io::Write::flush(&mut std::io::stderr());
+        let mut line = String::new();
+        let _ = std::io::stdin().read_line(&mut line);
+        if !matches!(line.trim().to_lowercase().as_str(), "y" | "yes") {
+            if json {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "ok": false,
+                        "action": action,
+                        "error": "not confirmed — nothing removed",
+                    })
+                );
+            } else {
+                println!("Aborted — nothing removed.");
+            }
+            return 0;
+        }
+    }
+    let mut removed: Vec<String> = Vec::new();
+    for (p, n) in candidates.iter().zip(names.iter()) {
+        match std::fs::remove_file(p) {
+            Ok(()) => removed.push(n.clone()),
+            Err(e) => return fail(&format!("could not remove {n}: {e}")),
+        }
+    }
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "ok": true,
+                "action": action,
+                "dry_run": false,
+                "data_dir": dir.display().to_string(),
+                "removed": removed,
+            })
+        );
+    } else {
+        println!("Removed {} file(s): {}", removed.len(), removed.join(", "));
+        if uninstall {
+            println!("DevTextTools' data is gone. To remove the program itself: delete the portable folder, or run the installer's Uninstall.exe.");
+        }
+    }
+    0
 }
 
 /// The fonts bundled with egui have no glyphs for the fancy-text ranges
@@ -414,7 +655,7 @@ fn configure_style(ctx: &egui::Context) {
     ctx.set_style(style);
 }
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 enum View {
     Tools,
     Timers,
@@ -511,6 +752,16 @@ struct App {
     rep_hits: RepHits,
     rep_note: String,
     rep_key: String,
+    /// Last known window rectangle (x, y, inner w, inner h),
+    /// persisted in the settings file and restored on launch.
+    window_geom: Option<[f32; 4]>,
+    /// True when the settings file on disk belongs to a newer
+    /// DevTextTools: saving is disabled (see `parse_settings`).
+    settings_future_schema: bool,
+    /// Fingerprint of the last saved work session + when it was
+    /// saved — the autosave debounce for crash recovery.
+    session_hash: u64,
+    session_last_save: Instant,
 }
 
 impl Default for App {
@@ -530,7 +781,7 @@ impl Default for App {
                 })
             })
             .collect();
-        App {
+        let mut app = App {
             favorites: settings.favorites,
             recents: settings.recents,
             saved_pipes: settings.pipes,
@@ -590,7 +841,33 @@ impl Default for App {
             param: String::new(),
             output: String::new(),
             status: String::new(),
+            window_geom: settings.window,
+            settings_future_schema: settings.future_schema,
+            session_hash: 0,
+            session_last_save: Instant::now(),
+        };
+        if app.settings_future_schema {
+            app.status = "⚠ Your settings file was written by a newer DevTextTools — started with defaults; the file was left untouched.".into();
         }
+        // Restore the work session (tabs + active view) saved by
+        // the previous run — including after a crash or power cut.
+        if let Ok(text) = std::fs::read_to_string(session_path()) {
+            if let Some((tabs, active, view)) = parse_session(&text, &app.ops) {
+                app.tabs = tabs;
+                app.tab_active = active;
+                app.view = view;
+                let tab = app.tabs[active].clone();
+                app.selected = tab.tool;
+                app.input = tab.input;
+                app.param = tab.param;
+                app.output = tab.output;
+                if let Some(idx) = app.selected {
+                    app.active_cat = app.ops[idx].category.to_string();
+                }
+            }
+        }
+        app.session_hash = app.session_fingerprint();
+        app
     }
 }
 
@@ -657,15 +934,179 @@ fn per_row(ui: &egui::Ui, target: f32) -> usize {
     (((ui.available_width() + spacing) / (target + spacing)).floor() as usize).max(1)
 }
 
-/// Where DevTextTools keeps its small settings file (favorites, recents,
-/// saved pipelines). Per-user app data on Windows; config dir elsewhere.
+/// Where DevTextTools keeps its settings file (favorites, recents,
+/// saved pipelines, history). Since v0.8.0 that is `settings.txt`
+/// inside the portable `data/` folder beside the executable —
+/// see `devtexttools::paths` for the resolution order and the
+/// one-way copy migration from the pre-v0.8.0 per-user location
+/// (`%LOCALAPPDATA%\DevTextTools\` on Windows).
 fn settings_path() -> std::path::PathBuf {
-    let base = std::env::var_os("LOCALAPPDATA")
-        .map(std::path::PathBuf::from)
-        .or_else(|| std::env::var_os("XDG_CONFIG_HOME").map(std::path::PathBuf::from))
-        .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config")))
-        .unwrap_or_else(|| std::path::PathBuf::from("."));
-    base.join("DevTextTools").join("settings.txt")
+    paths::data_file("settings.txt")
+}
+
+/// Where the saved work session lives (work tabs + active view),
+/// restored on the next launch — including after a crash.
+fn session_path() -> std::path::PathBuf {
+    paths::data_file("session.txt")
+}
+
+/// The settings format version this build writes. A file with no
+/// `schema_version` line is version 0 (every release before
+/// v0.8.0); the loader migrates it in memory and the next save
+/// stamps version 1.
+const SETTINGS_SCHEMA_VERSION: u32 = 1;
+
+/// The session file format version this build writes.
+const SESSION_SCHEMA_VERSION: u32 = 1;
+
+/// A stored window rectangle (x, y, inner width, inner height) is
+/// only trusted inside sane bounds — a corrupt or hand-edited
+/// settings file must never open the window off-screen or at a
+/// nonsense size.
+fn valid_window_geom(g: [f32; 4]) -> bool {
+    let (x, y, w, h) = (g[0], g[1], g[2], g[3]);
+    x.is_finite()
+        && y.is_finite()
+        && w.is_finite()
+        && h.is_finite()
+        && (-10_000.0..=10_000.0).contains(&x)
+        && (-10_000.0..=10_000.0).contains(&y)
+        && (320.0..=7_680.0).contains(&w)
+        && (240.0..=4_320.0).contains(&h)
+}
+
+/// Parse one `win` settings line's four fields, range-checked.
+fn parse_window_geom(mut parts: std::str::Split<'_, char>) -> Option<[f32; 4]> {
+    let g = [
+        parts.next()?.parse::<f32>().ok()?,
+        parts.next()?.parse::<f32>().ok()?,
+        parts.next()?.parse::<f32>().ok()?,
+        parts.next()?.parse::<f32>().ok()?,
+    ];
+    valid_window_geom(g).then_some(g)
+}
+
+/// The window rectangle saved in the settings file, if any —
+/// read directly (before the full settings load) so `main` can
+/// open the window where the user left it.
+fn saved_window_geom() -> Option<(f32, f32, f32, f32)> {
+    let text = std::fs::read_to_string(settings_path()).ok()?;
+    for line in text.lines() {
+        let mut parts = line.split('\t');
+        if parts.next() == Some("win") {
+            return parse_window_geom(parts).map(|g| (g[0], g[1], g[2], g[3]));
+        }
+    }
+    None
+}
+
+/// Short names for the views, used by the session file.
+fn view_name(v: View) -> &'static str {
+    match v {
+        View::Tools => "tools",
+        View::Timers => "timers",
+        View::Pipelines => "pipelines",
+        View::RegexLab => "regex",
+        View::Replace => "replace",
+        View::JsonTree => "json",
+    }
+}
+
+/// Inverse of `view_name`.
+fn view_from_name(s: &str) -> Option<View> {
+    match s {
+        "tools" => Some(View::Tools),
+        "timers" => Some(View::Timers),
+        "pipelines" => Some(View::Pipelines),
+        "regex" => Some(View::RegexLab),
+        "replace" => Some(View::Replace),
+        "json" => Some(View::JsonTree),
+        _ => None,
+    }
+}
+
+/// Serialize the work session (work tabs + active tab + view) —
+/// the state that lets the next launch reopen exactly where this
+/// one left off. Same tab-separated + `esc` line format as the
+/// settings file.
+fn serialize_session(tabs: &[WorkTab], active: usize, view: View, ops: &[Op]) -> String {
+    let mut out = String::new();
+    out.push_str(&format!("schema_version\t{SESSION_SCHEMA_VERSION}\n"));
+    out.push_str(&format!("view\t{}\n", view_name(view)));
+    out.push_str(&format!("active\t{active}\n"));
+    for tab in tabs {
+        let id = tab
+            .tool
+            .and_then(|i| ops.get(i))
+            .map(|o| o.id)
+            .unwrap_or("-");
+        out.push_str(&format!(
+            "tab\t{id}\t{}\t{}\t{}\n",
+            esc(&tab.input),
+            esc(&tab.param),
+            esc(&tab.output)
+        ));
+    }
+    out
+}
+
+/// Parse a session file. Returns None — start fresh — when the
+/// file is empty, corrupt, holds no tabs, or was written by a
+/// newer format version. Never panics on bad content.
+fn parse_session(text: &str, ops: &[Op]) -> Option<(Vec<WorkTab>, usize, View)> {
+    let mut tabs: Vec<WorkTab> = Vec::new();
+    let mut active = 0usize;
+    let mut view = View::Tools;
+    for line in text.lines() {
+        let mut parts = line.split('\t');
+        match parts.next() {
+            Some("schema_version") => {
+                let v = parts.next().and_then(|s| s.parse::<u32>().ok());
+                if v > Some(SESSION_SCHEMA_VERSION) {
+                    return None;
+                }
+            }
+            Some("view") => {
+                if let Some(v) = parts.next().and_then(view_from_name) {
+                    view = v;
+                }
+            }
+            Some("active") => {
+                if let Some(n) = parts.next().and_then(|s| s.parse::<usize>().ok()) {
+                    active = n;
+                }
+            }
+            Some("tab") => {
+                let id = parts.next().unwrap_or("-");
+                let tool = if id == "-" {
+                    None
+                } else {
+                    ops.iter().position(|o| o.id == id)
+                };
+                tabs.push(WorkTab {
+                    tool,
+                    input: parts.next().map(unesc).unwrap_or_default(),
+                    param: parts.next().map(unesc).unwrap_or_default(),
+                    output: parts.next().map(unesc).unwrap_or_default(),
+                });
+            }
+            _ => {}
+        }
+    }
+    if tabs.is_empty() {
+        return None;
+    }
+    active = active.min(tabs.len() - 1);
+    Some((tabs, active, view))
+}
+
+/// FNV-1a step for the session change fingerprint.
+fn fnv(mut h: u64, bytes: &[u8]) -> u64 {
+    for &b in bytes {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    h
 }
 
 type SavedPipes = Vec<(String, Vec<(String, String)>)>;
@@ -679,6 +1120,16 @@ struct Settings {
     regexes: Vec<(String, String)>,
     autorun: bool,
     history: Vec<(i64, String, String, String, String)>,
+    /// The `schema_version` found in the file (0 = no line =
+    /// pre-v0.8.0 format, migrated in memory on load).
+    schema_version: u32,
+    /// True when the file was written by a NEWER DevTextTools
+    /// (schema_version above this build's): the rest of the file
+    /// was not read, defaults are in use, and saving is disabled
+    /// so the newer file is never overwritten.
+    future_schema: bool,
+    /// Last window rectangle (x, y, inner w, inner h), if saved.
+    window: Option<[f32; 4]>,
 }
 
 /// Escape a value for one settings line (backslash scheme).
@@ -719,12 +1170,41 @@ fn unesc(s: &str) -> String {
 /// Load favorites / recents / pipelines / snippets / saved patterns.
 /// Unknown tool ids are dropped.
 fn load_settings(ops: &[Op]) -> Settings {
+    match std::fs::read_to_string(settings_path()) {
+        Ok(text) => parse_settings(&text, ops),
+        Err(_) => Settings::default(),
+    }
+}
+
+/// Parse the settings file text (split out from `load_settings`
+/// so the schema migrations can be fixture-tested). Tolerant by
+/// design: unknown lines are ignored, unknown tool ids dropped,
+/// a corrupt file yields defaults rather than a crash.
+fn parse_settings(text: &str, ops: &[Op]) -> Settings {
     let mut st = Settings::default();
     let known = |id: &str| ops.iter().any(|o| o.id == id);
-    if let Ok(text) = std::fs::read_to_string(settings_path()) {
+    // Schema gate first: a file from a newer DevTextTools is
+    // left completely alone (defaults + a warning) instead of
+    // being half-read and later overwritten by this build.
+    for line in text.lines() {
+        let mut parts = line.split('\t');
+        if parts.next() == Some("schema_version") {
+            if let Some(v) = parts.next().and_then(|v| v.parse::<u32>().ok()) {
+                st.schema_version = v;
+            }
+        }
+    }
+    if st.schema_version > SETTINGS_SCHEMA_VERSION {
+        st.future_schema = true;
+        return st;
+    }
+    {
         for line in text.lines() {
             let mut parts = line.split('\t');
             match parts.next() {
+                Some("win") => {
+                    st.window = parse_window_geom(parts);
+                }
                 Some("fav") => {
                     if let Some(id) = parts.next() {
                         if known(id) && !st.favorites.contains(&id.to_string()) {
@@ -799,9 +1279,18 @@ fn load_settings(ops: &[Op]) -> Settings {
 }
 
 impl App {
-    fn save_settings(&self) {
+    fn save_settings(&mut self) {
+        // A settings file written by a newer DevTextTools is
+        // never overwritten by this build (see parse_settings).
+        if self.settings_future_schema {
+            return;
+        }
         let clean = |s: &str| s.replace(['\t', '\n', '\r', '\u{1}'], " ");
         let mut out = String::new();
+        out.push_str(&format!("schema_version\t{SETTINGS_SCHEMA_VERSION}\n"));
+        if let Some(g) = self.window_geom {
+            out.push_str(&format!("win\t{}\t{}\t{}\t{}\n", g[0], g[1], g[2], g[3]));
+        }
         for id in &self.favorites {
             out.push_str(&format!("fav\t{id}\n"));
         }
@@ -838,11 +1327,39 @@ impl App {
                 esc(&h.output)
             ));
         }
-        let path = settings_path();
-        if let Some(dir) = path.parent() {
-            let _ = std::fs::create_dir_all(dir);
+        if let Err(e) = paths::atomic_write(&settings_path(), out.as_bytes()) {
+            self.status = format!("⚠ Could not save settings: {e}");
         }
-        let _ = std::fs::write(&path, out);
+    }
+
+    /// Change fingerprint of everything the session file holds
+    /// (tabs, active tab, view) — the autosave saves only when
+    /// this changes.
+    fn session_fingerprint(&self) -> u64 {
+        let mut h: u64 = 0xcbf29ce484222325;
+        h = fnv(h, &(self.tab_active as u64).to_le_bytes());
+        h = fnv(h, view_name(self.view).as_bytes());
+        for tab in &self.tabs {
+            h = fnv(
+                h,
+                &(tab.tool.map(|t| t as u64).unwrap_or(u64::MAX)).to_le_bytes(),
+            );
+            h = fnv(h, tab.input.as_bytes());
+            h = fnv(h, tab.param.as_bytes());
+            h = fnv(h, tab.output.as_bytes());
+        }
+        h
+    }
+
+    /// Save the work session (tabs + view) atomically, so the
+    /// next launch — even after a crash — reopens with the work
+    /// exactly as it stands now.
+    fn save_session(&mut self) {
+        self.stash_tab();
+        let text = serialize_session(&self.tabs, self.tab_active, self.view, &self.ops);
+        if let Err(e) = paths::atomic_write(&session_path(), text.as_bytes()) {
+            self.status = format!("⚠ Could not save the work session: {e}");
+        }
     }
 
     fn filtered(&self) -> Vec<usize> {
@@ -1675,10 +2192,7 @@ impl App {
                     if bytes.len() > 10_000_000 {
                         return Err("over 10 MB".into());
                     }
-                    (op.run)(
-                        &String::from_utf8_lossy(&bytes).into_owned(),
-                        &self.param.clone(),
-                    )
+                    (op.run)(&String::from_utf8_lossy(&bytes), &self.param.clone())
                 })
                 .and_then(|out| {
                     let out_name = format!("{name}.out.txt");
@@ -1794,7 +2308,7 @@ impl App {
 
     fn replace_ui(&mut self, ui: &mut egui::Ui) {
         ui.heading("Project find & replace");
-        ui.label("Searches text files under a folder (skips .git, target, node_modules; files over 2 MB are skipped). Preview first \u{2014} Apply only writes the files the preview found.");
+        ui.label("Searches text files under a folder (skips .git, target, node_modules; files over 2 MB are skipped). Preview first \u{2014} Apply only writes the files the preview found, and first keeps each original beside it as a <name>.bak backup.");
         ui.horizontal(|ui| {
             ui.label("Folder:");
             ui.add(
@@ -1863,13 +2377,17 @@ impl App {
                                 .into_owned(),
                             None => text.replace(self.rep_find.as_str(), &self.rep_replace),
                         };
-                        if new != text && std::fs::write(path, new).is_ok() {
+                        if new != text && replace_write(path, &new) {
                             files += 1;
                             edits += count;
                         }
                     }
                 }
-                self.rep_note = format!("Applied: {edits} replacement(s) in {files} file(s).");
+                self.rep_note = if files > 0 {
+                    format!("Applied: {edits} replacement(s) in {files} file(s). Each original is kept beside it as a .bak file.")
+                } else {
+                    format!("Applied: {edits} replacement(s) in {files} file(s).")
+                };
                 self.rep_hits.clear();
             }
         });
@@ -1942,8 +2460,48 @@ impl App {
 }
 
 impl eframe::App for App {
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        // Final save on a clean close: settings + the work
+        // session, so the next launch reopens exactly here. (The
+        // session is also autosaved while working — see update —
+        // so a crash loses at most the last moments of typing.)
+        self.stash_tab();
+        self.save_session();
+        self.save_settings();
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.stash_tab();
+        // Window geometry: remember where the window is so the
+        // next launch opens in the same place (persisted via the
+        // settings file's `win` line; only real changes save).
+        if let (Some(outer), Some(inner)) = ctx.input(|i| {
+            let v = i.viewport();
+            (v.outer_rect, v.inner_rect)
+        }) {
+            let g = [outer.left(), outer.top(), inner.width(), inner.height()];
+            if valid_window_geom(g) {
+                let changed = match self.window_geom {
+                    Some(old) => old.iter().zip(g.iter()).any(|(a, b)| (a - b).abs() > 1.0),
+                    None => true,
+                };
+                if changed {
+                    self.window_geom = Some(g);
+                    self.settings_dirty = true;
+                }
+            }
+        }
+        // Work-session autosave (crash recovery): when the tabs
+        // or view changed and a moment has passed since the last
+        // save, write the session out atomically.
+        let fp = self.session_fingerprint();
+        if fp != self.session_hash
+            && self.session_last_save.elapsed() >= Duration::from_millis(1500)
+        {
+            self.session_hash = fp;
+            self.session_last_save = Instant::now();
+            self.save_session();
+        }
         // Ctrl+K / Cmd+K quick launcher.
         if ctx.input(|i| (i.modifiers.command || i.modifiers.ctrl) && i.key_pressed(egui::Key::K)) {
             self.launcher_open = !self.launcher_open;
@@ -2654,5 +3212,104 @@ fn json_tree_node(
                 }
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn settings_v0_without_schema_line_loads_and_reports_v0() {
+        // The pre-v0.8.0 format: no schema_version line at all.
+        let ops = all_ops();
+        let id = ops[0].id;
+        let text = format!("fav\t{id}\nrecent\t{id}\nautorun\t1\n");
+        let st = parse_settings(&text, &ops);
+        assert_eq!(st.schema_version, 0);
+        assert!(!st.future_schema);
+        assert_eq!(st.favorites, vec![id.to_string()]);
+        assert_eq!(st.recents, vec![id.to_string()]);
+        assert!(st.autorun);
+    }
+
+    #[test]
+    fn settings_v1_loads_with_window_geometry() {
+        let ops = all_ops();
+        let id = ops[0].id;
+        let text = format!("schema_version\t1\nfav\t{id}\nwin\t100\t200\t1180\t760\n");
+        let st = parse_settings(&text, &ops);
+        assert_eq!(st.schema_version, 1);
+        assert!(!st.future_schema);
+        assert_eq!(st.favorites, vec![id.to_string()]);
+        assert_eq!(st.window, Some([100.0, 200.0, 1180.0, 760.0]));
+    }
+
+    #[test]
+    fn settings_from_a_newer_version_load_defaults_and_are_flagged() {
+        // A file written by a future DevTextTools must load as
+        // defaults with the future flag set (the GUI warns and
+        // save_settings refuses to overwrite it) — never a
+        // half-parse, never a silent wipe.
+        let ops = all_ops();
+        let id = ops[0].id;
+        let text = format!("schema_version\t99\nfav\t{id}\n");
+        let st = parse_settings(&text, &ops);
+        assert_eq!(st.schema_version, 99);
+        assert!(st.future_schema);
+        assert!(st.favorites.is_empty());
+    }
+
+    #[test]
+    fn window_geometry_is_range_checked() {
+        let ops = all_ops();
+        // Off-screen / nonsense rectangles are rejected.
+        let st = parse_settings("win\t-99999\t0\t10\t10\n", &ops);
+        assert_eq!(st.window, None);
+        let st = parse_settings("win\t0\t0\t99999\t760\n", &ops);
+        assert_eq!(st.window, None);
+        let st = parse_settings("win\tleft\ttop\twide\ttall\n", &ops);
+        assert_eq!(st.window, None);
+    }
+
+    #[test]
+    fn session_round_trip_restores_tabs_active_and_view() {
+        let ops = all_ops();
+        let tabs = vec![
+            WorkTab {
+                tool: Some(0),
+                input: "tabs\tand\nnewlines".into(),
+                param: "p".into(),
+                output: "o".into(),
+            },
+            WorkTab {
+                tool: None,
+                input: String::new(),
+                param: String::new(),
+                output: "second".into(),
+            },
+        ];
+        let text = serialize_session(&tabs, 1, View::RegexLab, &ops);
+        let (tabs2, active, view) = parse_session(&text, &ops).expect("session parses");
+        assert_eq!(active, 1);
+        assert_eq!(view, View::RegexLab);
+        assert_eq!(tabs2.len(), 2);
+        assert_eq!(tabs2[0].tool, Some(0));
+        assert_eq!(tabs2[0].input, "tabs\tand\nnewlines");
+        assert_eq!(tabs2[1].tool, None);
+        assert_eq!(tabs2[1].output, "second");
+    }
+
+    #[test]
+    fn session_garbage_or_future_format_starts_fresh() {
+        let ops = all_ops();
+        assert!(parse_session("", &ops).is_none());
+        assert!(parse_session("not a session at all", &ops).is_none());
+        assert!(parse_session("schema_version\t99\ntab\t-\ta\tb\tc\n", &ops).is_none());
+        // An out-of-range active index is clamped, not fatal.
+        let tabs = vec![WorkTab::default()];
+        let text = serialize_session(&tabs, 0, View::Tools, &ops).replace("active\t0", "active\t9");
+        let (_, active, _) = parse_session(&text, &ops).expect("clamped session parses");
+        assert_eq!(active, 0);
     }
 }
