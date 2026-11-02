@@ -1,10 +1,15 @@
 ; DevTextTools installer — per-user, no admin needed.
 Unicode true
 Name "DevTextTools"
-; The packaging step overrides OUTFILE_NAME per architecture
-; (makensis -DOUTFILE_NAME=DevTextTools-Setup-x86.exe for the 32-bit build).
+; The release workflow passes the version with -DAppVersion=x.y.z;
+; the default below is only for local test builds.
+!ifndef AppVersion
+  !define AppVersion "0.8.0"
+!endif
+; The packaging step sets the output file with -DOUTFILE_NAME=...
+; (the workflow renames the result to DevTextTools-v{VERSION}-x64-Setup.exe).
 !ifndef OUTFILE_NAME
-  !define OUTFILE_NAME "DevTextTools-Setup-x64.exe"
+  !define OUTFILE_NAME "DevTextTools-Setup.exe"
 !endif
 OutFile "${OUTFILE_NAME}"
 InstallDir "$LOCALAPPDATA\Programs\DevTextTools"
@@ -27,7 +32,7 @@ Section "Install"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\DevTextTools" "DisplayName" "DevTextTools"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\DevTextTools" "UninstallString" "$INSTDIR\Uninstall.exe"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\DevTextTools" "DisplayVersion" "0.7.2"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\DevTextTools" "DisplayVersion" "${AppVersion}"
 SectionEnd
 
 Section "Uninstall"
@@ -35,6 +40,9 @@ Section "Uninstall"
   Delete "$INSTDIR\LICENSE"
   Delete "$INSTDIR\README.md"
   Delete "$INSTDIR\Uninstall.exe"
+  ; The program's own data folder (settings + saved session) lives
+  ; beside the exe, i.e. inside $INSTDIR for an installed build.
+  RMDir /r "$INSTDIR\data"
   RMDir "$INSTDIR"
   Delete "$SMPROGRAMS\DevTextTools\DevTextTools.lnk"
   RMDir "$SMPROGRAMS\DevTextTools"

@@ -1,7 +1,11 @@
 DevTextTools — portable build
 
-Just run DevTextTools.exe. Nothing is installed, nothing is written to your
-PC by the program, and no internet is used. Delete the folder to remove it.
+Just run DevTextTools.exe; nothing is installed. The program keeps its
+own files — your settings (favorites, recents, pipelines, snippets,
+saved patterns, history) and your work session (open tabs and text, so
+the window reopens where you left off, even after a crash) — in a
+`data` folder created beside DevTextTools.exe. No internet is used.
+Delete the folder (or just the `data` folder) to remove everything.
 
 The program is free (MIT license, see LICENSE). The binary is unsigned —
 Windows may warn on first run; choose More info, then Run anyway, if you
