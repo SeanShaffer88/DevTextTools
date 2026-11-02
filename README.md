@@ -12,7 +12,7 @@ Imagine you keep visiting ten different websites whenever you need to fix up som
 - **Search box** — type part of a tool's name or what it does ("json", "sort", "sha", "roman", "subnet") and the list filters instantly
 - **Chain tools** — "Output → Input" feeds one tool's result into the next, like the multi-step pipelines on the tool sites
 - **Built for developers** — star your daily tools into a ★ Favorites tab (a ◷ Recent tab tracks your last 10 runs), press **Ctrl+K** to jump to any tool by keyboard, drag & drop files straight onto the window (a dropped PDF shows its info), chain tools into saved **Pipelines**, and test patterns live in the **Regex Lab** with matches highlighted as you type. Favorites, recents and pipelines are remembered between sessions
-- **Work like a developer** — multiple **work tabs** (each keeps its own tool and text), **Undo/Redo** for whole actions, **smart paste** that recognises JSON/JWTs/hashes/stack traces and offers the right tools, an opt-in **auto-run on paste**, a **snippet library**, **batch runs** over many files, a project-wide **find & replace** view with preview, and a **JSON tree explorer** with copyable paths
+- **Work like a developer** — multiple **work tabs** (each keeps its own tool and text; the session is saved as you go and restored on the next launch, crash included), **Undo/Redo** for whole actions, **smart paste** that recognises JSON/JWTs/hashes/stack traces and offers the right tools, an opt-in **auto-run on paste**, a **snippet library**, **batch runs** over many files, a project-wide **find & replace** view with preview (every file it overwrites gets a `.bak` backup first), and a **JSON tree explorer** with copyable paths
 - **Same tools in a command line** — every tool also runs from a terminal (see *Command line* below), so scripts can use them too; there are no window-only tools
 - **Fully offline, private by design** — no account, no tracking code from us, no network calls; password and hash tools work on your machine only
 - **Free, no ads, no in-app purchases** — optional donations only, per the house rule for all of SEAN's software
@@ -108,8 +108,8 @@ Per-site coverage and honest gaps are in [docs/COVERAGE.md](docs/COVERAGE.md); p
 
 ## Install / setup
 
-1. Download the release for Windows: the installer `.exe`, or the portable `.zip`.
-2. Portable: unzip anywhere, run `DevTextTools.exe`. Installer: run it and follow the steps.
+1. Download the release for Windows: `DevTextTools-v{version}-x64-Setup.exe` (installer) or `DevTextTools-v{version}-x64-Portable.zip` (portable) — every release also carries `SHA256SUMS.txt` so you can verify the download. Full detail: [docs/INSTALL.md](docs/INSTALL.md).
+2. Portable: unzip anywhere, run `DevTextTools.exe`. Installer: run it and follow the steps (per-user, no admin needed).
 3. The binaries are **unsigned** (no code-signing certificate) — Windows may show a "Windows protected your PC" prompt; choose *More info → Run anyway* if you trust this build, which you can verify against the source here.
 
 ## How to use it
@@ -130,6 +130,19 @@ echo hello world | devtexttools case-upper
 echo 255 | devtexttools conv-base --param 10|||16
 ```
 
+Maintenance commands:
+
+```
+devtexttools --version                       print the version
+devtexttools case-upper --json               one JSON object: {"ok":true,"tool":"case-upper","output":"…"}
+devtexttools --clean                         remove DevTextTools' own files (settings + saved session) from its data folder — asks first
+devtexttools --clean --dry-run               preview what --clean would remove
+devtexttools --clean --silent                remove without asking
+devtexttools --uninstall                     like --clean, and explains how the program files themselves are removed
+```
+
+`--clean`/`--uninstall` refuse while a DevTextTools window is open, and only ever touch the program's own files in its `data` folder.
+
 ## Build instructions (developers)
 
 - Needs a Rust toolchain (1.80+). Build and test: `cargo test --locked` (full suite — library + integration tests), then `cargo build --release --locked`.
@@ -143,7 +156,7 @@ echo 255 | devtexttools conv-base --param 10|||16
 ## Security / privacy / data / network
 
 - DevTextTools makes **no network calls at all**. Text you paste — including passwords you check or hash — never leaves the PC.
-- The only thing ever written to disk is a small settings file (favorites, recent tools, pipelines, snippets, saved patterns) in your local app-data folder. Your Input/Output text itself is never saved.
+- The program writes only its own files, all in one place: a `data` folder beside the executable, holding your settings (favorites, recent tools, pipelines, snippets, saved patterns, history) and your **work session** — the open work tabs with their text, saved as you go and restored on the next launch, so a crash or power cut doesn't lose your work. Nothing is written anywhere else. (Releases before v0.8.0 kept settings in your local app-data folder instead; the first v0.8.0 run copies them into `data` and leaves the originals untouched — see `docs/MIGRATION.md`.)
 - Hash tools are checksums/fingerprints; MD5 and SHA-1 are labelled in-app as not safe for passwords or new security uses. The JWT decoder says plainly that decoding is not verification; the separate JWT builder signs with HS256 on your machine.
 
 ## Limitations and known issues
