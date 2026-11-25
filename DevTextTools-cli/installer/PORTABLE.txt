@@ -1,0 +1,17 @@
+DevTextTools — portable build
+
+Just run DevTextTools.exe; nothing is installed. The program keeps its
+own files — your settings (favorites, recents, pipelines, snippets,
+saved patterns, history) and your work session (open tabs and text, so
+the window reopens where you left off, even after a crash) — in a
+`data` folder created beside DevTextTools.exe. No internet is used.
+Delete the folder (or just the `data` folder) to remove everything.
+
+The same folder includes `devtexttools-cli.exe`, a console program for
+scripts and local AI. Run `devtexttools-cli.exe --help` for commands.
+It uses the same offline tools and does not save request input or output.
+
+The program is free (MIT license, see LICENSE). The binary is unsigned —
+Windows may warn on first run; choose More info, then Run anyway, if you
+trust this build. You can check the file's SHA-256 against the release
+notes where you downloaded it.
