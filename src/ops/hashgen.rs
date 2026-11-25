@@ -1,5 +1,6 @@
 use super::Op;
-use crate::{split_param, Rng};
+use crate::split_param;
+use rand::Rng as _;
 use sha1::Digest as _;
 
 fn op(
@@ -35,17 +36,17 @@ pub fn ops() -> Vec<Op> {
         }),
         op("hash-crc32", "CRC32 Checksum", "Hash / Crypto", "CRC32 checksum (the zip/file-integrity kind).", None, |i, _| Ok(format!("{:08x}", crc32(i.as_bytes())))),
         op("hash-hmac-sha256", "HMAC-SHA256", "Hash / Crypto", "Keyed HMAC-SHA256. Parameter is the secret key.", Some("secret key"), |i, p| { if p.is_empty() { return Err("Enter the secret key as the Parameter".into()); } Ok(hexbytes(&hmac_sha256(p.as_bytes(), i.as_bytes()))) }),
-        op("gen-uuid", "UUID Generator", "Generators", "Generate random UUID v4 values. Input is ignored; parameter = how many (default 1).", Some("count (optional)"), |_, p| { let n = parse_count(p, 100)?; let mut rng = Rng::from_time(); Ok((0..n).map(|_| uuid_v4(&mut rng)).collect::<Vec<_>>().join("\n")) }),
-        op("gen-guid-upper", "GUID Generator (Uppercase, Braces)", "Generators", "Windows-style {GUID} in uppercase.", Some("count (optional)"), |_, p| { let n = parse_count(p, 100)?; let mut rng = Rng::from_time(); Ok((0..n).map(|_| format!("{{{}}}", uuid_v4(&mut rng).to_uppercase())).collect::<Vec<_>>().join("\n")) }),
-        op("gen-password", "Password Generator", "Generators", "Strong random passwords. Parameter: length|||count (defaults 20, 1). Uses a time-seeded generator — for high-stakes secrets prefer a password manager's generator.", Some("length|||count"), |_, p| { let v = split_param(p); let len = v.first().and_then(|s| s.trim().parse::<usize>().ok()).unwrap_or(20); let n = v.get(1).and_then(|s| s.trim().parse::<usize>().ok()).unwrap_or(1); if !(4..=512).contains(&len) { return Err("Length must be 4–512".into()); } if n > 100 { return Err("Max 100 passwords".into()); } let mut rng = Rng::from_time(); let chars: Vec<char> = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*()-_=+".chars().collect(); Ok((0..n).map(|_| (0..len).map(|_| chars[rng.below(chars.len() as u64) as usize]).collect::<String>()).collect::<Vec<_>>().join("\n")) }),
-        op("gen-password-strength", "Password Strength Check", "Generators", "Estimate a password's strength: length, character variety, rough entropy. The password is never stored or sent anywhere.", None, |i, _| Ok(password_strength(i.trim()))),
-        op("gen-random-string", "Random String", "Generators", "Random letters/numbers string. Parameter: length (default 32).", Some("length (optional)"), |_, p| { let len = p.trim().parse::<usize>().unwrap_or(32); if len > 10000 { return Err("Max length 10,000".into()); } let mut rng = Rng::from_time(); let chars: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".chars().collect(); Ok((0..len).map(|_| chars[rng.below(chars.len() as u64) as usize]).collect()) }),
+        op("gen-uuid", "UUID Generator", "Generators", "Generate cryptographically random UUID v4 values. Input is ignored; parameter = how many (default 1).", Some("count (optional)"), |_, p| { let n = parse_count(p, 100)?; let mut rng = rand::rng(); Ok((0..n).map(|_| uuid_v4(&mut rng)).collect::<Vec<_>>().join("\n")) }),
+        op("gen-guid-upper", "GUID Generator (Uppercase, Braces)", "Generators", "Windows-style {GUID} generated from the operating system's secure random source.", Some("count (optional)"), |_, p| { let n = parse_count(p, 100)?; let mut rng = rand::rng(); Ok((0..n).map(|_| format!("{{{}}}", uuid_v4(&mut rng).to_uppercase())).collect::<Vec<_>>().join("\n")) }),
+        op("gen-password", "Password Generator", "Generators", "Generate passwords with the operating system's cryptographically secure random source. This tool's inputs and outputs are not saved to history or session files.", Some("length|||count"), |_, p| { let v = split_param(p); let len = v.first().and_then(|s| s.trim().parse::<usize>().ok()).unwrap_or(20); let n = v.get(1).and_then(|s| s.trim().parse::<usize>().ok()).unwrap_or(1); if !(4..=512).contains(&len) { return Err("Length must be 4–512".into()); } if n > 100 { return Err("Max 100 passwords".into()); } let mut rng = rand::rng(); let chars: Vec<char> = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*()-_=+".chars().collect(); Ok((0..n).map(|_| (0..len).map(|_| chars[rng.random_range(0..chars.len())]).collect::<String>()).collect::<Vec<_>>().join("\n")) }),
+        op("gen-password-strength", "Password Strength Check", "Generators", "Estimate a password's strength: length, character variety, rough entropy. This tool's input and output are not saved to history or session files.", None, |i, _| Ok(password_strength(i.trim()))),
+        op("gen-random-string", "Random String", "Generators", "Generate a cryptographically random letters/numbers string. Parameter: length (default 32).", Some("length (optional)"), |_, p| { let len = p.trim().parse::<usize>().unwrap_or(32); if len > 10000 { return Err("Max length 10,000".into()); } let mut rng = rand::rng(); let chars: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".chars().collect(); Ok((0..len).map(|_| chars[rng.random_range(0..chars.len())]).collect()) }),
         op("gen-lorem", "Lorem Ipsum Generator", "Generators", "Filler paragraphs. Parameter: paragraph count (default 3).", Some("paragraphs (optional)"), |_, p| { let n = parse_count(p, 50)?; Ok((0..n).map(lorem_para).collect::<Vec<_>>().join("\n\n")) }),
-        op("gen-random-number", "Random Number", "Generators", "Random integers. Parameter: min|||max|||count (defaults 1|||100|||10).", Some("min|||max|||count"), |_, p| { let v = split_param(p); let min: i64 = v.first().and_then(|s| s.trim().parse().ok()).unwrap_or(1); let max: i64 = v.get(1).and_then(|s| s.trim().parse().ok()).unwrap_or(100); let n: usize = v.get(2).and_then(|s| s.trim().parse().ok()).unwrap_or(10); if max <= min { return Err("Max must be bigger than min".into()); } if n > 10000 { return Err("Max 10,000 numbers".into()); } let mut rng = Rng::from_time(); let span = (max - min + 1) as u64; Ok((0..n).map(|_| (min + rng.below(span) as i64).to_string()).collect::<Vec<_>>().join("\n")) }),
+        op("gen-random-number", "Random Number", "Generators", "Random integers. Parameter: min|||max|||count (defaults 1|||100|||10).", Some("min|||max|||count"), |_, p| { let v = split_param(p); let min: i64 = v.first().and_then(|s| s.trim().parse().ok()).unwrap_or(1); let max: i64 = v.get(1).and_then(|s| s.trim().parse().ok()).unwrap_or(100); let n: usize = v.get(2).and_then(|s| s.trim().parse().ok()).unwrap_or(10); if max <= min { return Err("Max must be bigger than min".into()); } if n > 10000 { return Err("Max 10,000 numbers".into()); } let mut rng = rand::rng(); Ok((0..n).map(|_| rng.random_range(min..=max).to_string()).collect::<Vec<_>>().join("\n")) }),
         op("gen-dice", "Dice Roller", "Generators", "Roll dice. Input like 2d6 (two six-sided dice), parameter ignored.", None, |i, _| dice(i)),
-        op("gen-coin", "Coin Flipper", "Generators", "Flip a coin N times. Parameter: count (default 1).", Some("count (optional)"), |_, p| { let n = parse_count(p, 10000)?; let mut rng = Rng::from_time(); let flips: Vec<&str> = (0..n).map(|_| if rng.below(2) == 0 { "Heads" } else { "Tails" }).collect(); Ok(format!("{}\nHeads: {}  Tails: {}", flips.join(", "), flips.iter().filter(|f| **f == "Heads").count(), flips.iter().filter(|f| **f == "Tails").count())) }),
-        op("gen-pick-random-line", "Random Picker (pick from lines)", "Generators", "Pick random lines from the input list. Parameter: how many to pick (default 1).", Some("count (optional)"), |i, p| { let lines: Vec<&str> = i.lines().filter(|l| !l.trim().is_empty()).collect(); if lines.is_empty() { return Err("Enter the list, one item per line".into()); } let n = parse_count(p, lines.len().max(1))?; let mut rng = Rng::from_time(); Ok((0..n).map(|_| lines[rng.below(lines.len() as u64) as usize]).collect::<Vec<_>>().join("\n")) }),
-        op("gen-random-color", "Random Color", "Generators", "Generate random hex colors. Parameter: count (default 5).", Some("count (optional)"), |_, p| { let n = parse_count(p, 100)?; let mut rng = Rng::from_time(); Ok((0..n).map(|_| { let v = rng.below(0x1000000); format!("#{v:06X}") }).collect::<Vec<_>>().join("\n")) }),
+        op("gen-coin", "Coin Flipper", "Generators", "Flip a coin N times. Parameter: count (default 1).", Some("count (optional)"), |_, p| { let n = parse_count(p, 10000)?; let mut rng = rand::rng(); let flips: Vec<&str> = (0..n).map(|_| if rng.random_range(0..2) == 0 { "Heads" } else { "Tails" }).collect(); Ok(format!("{}\nHeads: {}  Tails: {}", flips.join(", "), flips.iter().filter(|f| **f == "Heads").count(), flips.iter().filter(|f| **f == "Tails").count())) }),
+        op("gen-pick-random-line", "Random Picker (pick from lines)", "Generators", "Pick random lines from the input list. Parameter: how many to pick (default 1).", Some("count (optional)"), |i, p| { let lines: Vec<&str> = i.lines().filter(|l| !l.trim().is_empty()).collect(); if lines.is_empty() { return Err("Enter the list, one item per line".into()); } let n = parse_count(p, lines.len().max(1))?; let mut rng = rand::rng(); Ok((0..n).map(|_| lines[rng.random_range(0..lines.len())]).collect::<Vec<_>>().join("\n")) }),
+        op("gen-random-color", "Random Color", "Generators", "Generate random hex colors. Parameter: count (default 5).", Some("count (optional)"), |_, p| { let n = parse_count(p, 100)?; let mut rng = rand::rng(); Ok((0..n).map(|_| { let v = rng.random_range(0..0x1000000); format!("#{v:06X}") }).collect::<Vec<_>>().join("\n")) }),
     ]
 }
 
@@ -89,12 +90,9 @@ fn hmac_sha256(key: &[u8], msg: &[u8]) -> Vec<u8> {
     outer.update(inner_hash);
     outer.finalize().to_vec()
 }
-pub fn uuid_v4(rng: &mut Rng) -> String {
+pub fn uuid_v4(rng: &mut impl rand::Rng) -> String {
     let mut b = [0u8; 16];
-    for chunk in b.chunks_mut(8) {
-        let v = rng.next_u64().to_le_bytes();
-        chunk.copy_from_slice(&v[..chunk.len()]);
-    }
+    rng.fill(&mut b);
     b[6] = (b[6] & 0x0f) | 0x40;
     b[8] = (b[8] & 0x3f) | 0x80;
     format!("{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}", b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15])
@@ -162,8 +160,8 @@ fn dice(i: &str) -> Result<String, String> {
     if n == 0 || n > 1000 || sides < 2 {
         return Err("Count 1-1000, sides at least 2".into());
     }
-    let mut rng = Rng::from_time();
-    let rolls: Vec<u64> = (0..n).map(|_| rng.below(sides) + 1).collect();
+    let mut rng = rand::rng();
+    let rolls: Vec<u64> = (0..n).map(|_| rng.random_range(1..=sides)).collect();
     Ok(format!(
         "Rolls: {}\nTotal: {}",
         rolls

@@ -1007,7 +1007,7 @@ fn mock_data(input: &str, param: &str) -> Result<String, String> {
         return Err("The row count must be at least 1.".into());
     }
     let count = count.min(200);
-    let mut rng = Rng::from_time();
+    let mut rng = Rng::from_os();
     let mut rows = Vec::new();
     for _ in 0..count {
         rows.push(fill_template(&template, &mut rng)?);

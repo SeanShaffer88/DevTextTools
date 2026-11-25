@@ -14,19 +14,15 @@ pub mod win32;
 
 pub use ops::{all_ops, find_op, run_op, Op};
 
-/// Simple deterministic-when-seeded RNG (xorshift64*) so tools that need
-/// randomness work offline with no extra dependencies. Seed 0 is remapped.
+/// Non-cryptographic xorshift64* generator for deterministic transforms and
+/// mock data. Never use this type for passwords, keys, or other secrets.
 pub struct Rng(pub u64);
 impl Rng {
     pub fn new(seed: u64) -> Self {
         Rng(if seed == 0 { 0x9E3779B97F4A7C15 } else { seed })
     }
-    pub fn from_time() -> Self {
-        let n = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos() as u64)
-            .unwrap_or(0x2545F4914F6CDD1D);
-        Rng::new(n ^ (std::process::id() as u64) << 32)
+    pub(crate) fn from_os() -> Self {
+        Rng::new(rand::random())
     }
     pub fn next_u64(&mut self) -> u64 {
         let mut x = self.0;

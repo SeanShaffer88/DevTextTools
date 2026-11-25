@@ -1,5 +1,6 @@
 use super::Op;
 use crate::{numbers_from, split_param, Rng};
+use rand::Rng as _;
 
 fn op(
     id: &'static str,
@@ -40,7 +41,23 @@ pub fn ops() -> Vec<Op> {
         op("lines-sort-length", "Sort Lines by Length", "Lines", "Shortest line first.", None, |i, _| sorted_lines(i, |a, b| a.chars().count().cmp(&b.chars().count()))),
         op("lines-sort-numeric", "Sort Lines Numerically", "Lines", "Sort lines as numbers, ascending.", None, |i, _| { let mut v: Vec<&str> = i.lines().collect(); v.sort_by(|a, b| a.trim().parse::<f64>().unwrap_or(f64::MAX).total_cmp(&b.trim().parse::<f64>().unwrap_or(f64::MAX))); Ok(v.join("\n")) }),
         op("lines-reverse", "Reverse Line Order", "Lines", "Last line becomes first.", None, |i, _| Ok(i.lines().rev().collect::<Vec<_>>().join("\n"))),
-        op("lines-shuffle", "Shuffle Lines", "Lines", "Randomize line order. Optional param: seed number.", Some("seed (optional)"), |i, p| { let seed = p.trim().parse::<u64>().unwrap_or_else(|_| Rng::from_time().0); let mut rng = Rng::new(seed); let mut v: Vec<&str> = i.lines().collect(); for k in (1..v.len()).rev() { let j = rng.below((k + 1) as u64) as usize; v.swap(k, j); } Ok(v.join("\n")) }),
+        op("lines-shuffle", "Shuffle Lines", "Lines", "Randomize line order. Optional param: seed number.", Some("seed (optional)"), |i, p| {
+            let mut v: Vec<&str> = i.lines().collect();
+            if let Ok(seed) = p.trim().parse::<u64>() {
+                let mut rng = Rng::new(seed);
+                for k in (1..v.len()).rev() {
+                    let j = rng.below((k + 1) as u64) as usize;
+                    v.swap(k, j);
+                }
+            } else {
+                let mut rng = rand::rng();
+                for k in (1..v.len()).rev() {
+                    let j = rng.random_range(0..=k);
+                    v.swap(k, j);
+                }
+            }
+            Ok(v.join("\n"))
+        }),
         op("lines-dedupe", "Remove Duplicate Lines", "Lines", "Keep only the first copy of each line.", None, |i, _| { let mut seen = std::collections::HashSet::new(); Ok(i.lines().filter(|l| seen.insert(l.to_string())).collect::<Vec<_>>().join("\n")) }),
         op("lines-dedupe-ci", "Remove Duplicates (ignore case)", "Lines", "Remove duplicate lines ignoring upper/lower case.", None, |i, _| { let mut seen = std::collections::HashSet::new(); Ok(i.lines().filter(|l| seen.insert(l.to_lowercase())).collect::<Vec<_>>().join("\n")) }),
         op("lines-remove-empty", "Remove Empty Lines", "Lines", "Delete blank and whitespace-only lines.", None, |i, _| Ok(i.lines().filter(|l| !l.trim().is_empty()).collect::<Vec<_>>().join("\n"))),

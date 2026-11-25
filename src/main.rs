@@ -667,6 +667,99 @@ enum View {
 
 /// Project find & replace results: (file, match count, sample lines).
 type RepHits = Vec<(std::path::PathBuf, usize, Vec<(usize, String)>)>;
+const REPLACE_MAX_FILES: usize = 5000;
+const REPLACE_MAX_DIRS: usize = 10000;
+const REPLACE_MAX_TOTAL_BYTES: u64 = 100_000_000;
+
+/// Tools whose input, parameter, or output can reasonably contain
+/// credentials or bearer tokens. Their tab state and run history stay local
+/// to memory and are never serialized.
+fn sensitive_tool_id(id: &str) -> bool {
+    matches!(
+        id,
+        "gen-password"
+            | "gen-password-strength"
+            | "gen-random-string"
+            | "hash-hmac-sha256"
+            | "dev-jwt-build"
+            | "dev-jwt-decode"
+            | "dev-curl"
+            | "dev-env-to-json"
+            | "dev-json-to-env"
+            | "dev-env-sort"
+            | "dev-env-diff"
+            | "dev-env-merge"
+    )
+}
+
+/// Enumerate bounded, in-root regular files for Project Replace. Symlinks and
+/// reparse-point escapes are ignored; canonical directory tracking blocks
+/// cycles even when the platform reports a junction as a directory.
+fn replace_scan_files(root: &std::path::Path) -> Result<(Vec<std::path::PathBuf>, bool), String> {
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|e| format!("Could not resolve the selected folder: {e}"))?;
+    let mut files = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    let mut visited = std::collections::HashSet::new();
+    let mut truncated = false;
+    let mut total_bytes = 0u64;
+
+    'walk: while let Some(dir) = stack.pop() {
+        if visited.len() >= REPLACE_MAX_DIRS {
+            truncated = true;
+            break;
+        }
+        let Ok(canonical_dir) = dir.canonicalize() else {
+            continue;
+        };
+        if !canonical_dir.starts_with(&canonical_root) || !visited.insert(canonical_dir) {
+            continue;
+        }
+        let Ok(rd) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in rd.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_symlink() {
+                continue;
+            }
+            if file_type.is_dir() {
+                if !matches!(name.as_str(), ".git" | "target" | "node_modules") {
+                    stack.push(path);
+                }
+                continue;
+            }
+            let Ok(canonical_path) = path.canonicalize() else {
+                continue;
+            };
+            if !canonical_path.starts_with(&canonical_root) {
+                continue;
+            }
+            let Ok(metadata) = std::fs::metadata(&path) else {
+                continue;
+            };
+            if !metadata.is_file() || metadata.len() > 2_000_000 {
+                continue;
+            }
+            if total_bytes.saturating_add(metadata.len()) > REPLACE_MAX_TOTAL_BYTES {
+                truncated = true;
+                break 'walk;
+            }
+            if files.len() == REPLACE_MAX_FILES {
+                truncated = true;
+                break 'walk;
+            }
+            total_bytes += metadata.len();
+            files.push(path);
+        }
+    }
+    Ok((files, truncated))
+}
 
 /// One work tab in the Tools view: its own tool + input/parameter/output.
 #[derive(Clone, Default)]
@@ -675,6 +768,9 @@ struct WorkTab {
     input: String,
     param: String,
     output: String,
+    /// Sticky for this tab after a sensitive tool is used; switching tools
+    /// must not make earlier secrets eligible for session persistence.
+    private: bool,
 }
 
 #[derive(Default)]
@@ -768,6 +864,7 @@ impl Default for App {
     fn default() -> Self {
         let ops = all_ops();
         let settings = load_settings(&ops);
+        let purge_sensitive_history = settings.purged_sensitive_history;
         let history: Vec<HistEntry> = settings
             .history
             .iter()
@@ -803,7 +900,7 @@ impl Default for App {
             rep_hits: Vec::new(),
             rep_note: String::new(),
             rep_key: String::new(),
-            settings_dirty: false,
+            settings_dirty: purge_sensitive_history,
             history,
             show_history: true,
             launcher_open: false,
@@ -867,6 +964,12 @@ impl Default for App {
             }
         }
         app.session_hash = app.session_fingerprint();
+        if app.tabs.iter().any(|tab| tab.private) {
+            // Remove credentials written by older versions as soon as we
+            // detect them, not only after the user edits the session.
+            app.save_session();
+            app.session_hash = app.session_fingerprint();
+        }
         app
     }
 }
@@ -1040,11 +1143,17 @@ fn serialize_session(tabs: &[WorkTab], active: usize, view: View, ops: &[Op]) ->
             .and_then(|i| ops.get(i))
             .map(|o| o.id)
             .unwrap_or("-");
+        let private = tab.private || sensitive_tool_id(id);
+        let (input, param, output) = if private {
+            ("", "", "")
+        } else {
+            (tab.input.as_str(), tab.param.as_str(), tab.output.as_str())
+        };
         out.push_str(&format!(
             "tab\t{id}\t{}\t{}\t{}\n",
-            esc(&tab.input),
-            esc(&tab.param),
-            esc(&tab.output)
+            esc(input),
+            esc(param),
+            esc(output)
         ));
     }
     out
@@ -1083,11 +1192,18 @@ fn parse_session(text: &str, ops: &[Op]) -> Option<(Vec<WorkTab>, usize, View)> 
                 } else {
                     ops.iter().position(|o| o.id == id)
                 };
+                let sensitive = sensitive_tool_id(id);
+                let input = parts.next().map(unesc).unwrap_or_default();
+                let param = parts.next().map(unesc).unwrap_or_default();
+                let output = parts.next().map(unesc).unwrap_or_default();
+                let private =
+                    sensitive && (!input.is_empty() || !param.is_empty() || !output.is_empty());
                 tabs.push(WorkTab {
                     tool,
-                    input: parts.next().map(unesc).unwrap_or_default(),
-                    param: parts.next().map(unesc).unwrap_or_default(),
-                    output: parts.next().map(unesc).unwrap_or_default(),
+                    input: if sensitive { String::new() } else { input },
+                    param: if sensitive { String::new() } else { param },
+                    output: if sensitive { String::new() } else { output },
+                    private,
                 });
             }
             _ => {}
@@ -1120,6 +1236,8 @@ struct Settings {
     regexes: Vec<(String, String)>,
     autorun: bool,
     history: Vec<(i64, String, String, String, String)>,
+    /// True when sensitive history was found and discarded during load.
+    purged_sensitive_history: bool,
     /// The `schema_version` found in the file (0 = no line =
     /// pre-v0.8.0 format, migrated in memory on load).
     schema_version: u32,
@@ -1257,7 +1375,9 @@ fn parse_settings(text: &str, ops: &[Op]) -> Settings {
                         parts.next(),
                         parts.next(),
                     ) {
-                        if known(id) {
+                        if known(id) && sensitive_tool_id(id) {
+                            st.purged_sensitive_history = true;
+                        } else if known(id) {
                             if let Ok(ts) = ts.parse::<i64>() {
                                 st.history.push((
                                     ts,
@@ -1317,7 +1437,12 @@ impl App {
         if self.paste_autorun {
             out.push_str("autorun\t1\n");
         }
-        for h in self.history.iter().take(20) {
+        for h in self
+            .history
+            .iter()
+            .filter(|h| !sensitive_tool_id(self.ops[h.tool].id))
+            .take(20)
+        {
             out.push_str(&format!(
                 "hist\t{}\t{}\t{}\t{}\t{}\n",
                 h.ts,
@@ -1442,7 +1567,7 @@ impl App {
         if let Some(n) = reopen {
             if let Some(h) = self.history.get(n).cloned() {
                 self.snapshot();
-                self.selected = Some(h.tool);
+                self.select_tool(h.tool);
                 self.active_cat = self.ops[h.tool].category.to_string();
                 self.input = h.input;
                 self.param = h.param;
@@ -1655,12 +1780,30 @@ impl App {
 
     /// Keep the active work tab in sync with the visible fields.
     fn stash_tab(&mut self) {
+        self.mark_active_tab_private_if_sensitive();
         if let Some(tab) = self.tabs.get_mut(self.tab_active) {
             tab.tool = self.selected;
             tab.input = self.input.clone();
             tab.param = self.param.clone();
             tab.output = self.output.clone();
         }
+    }
+
+    fn mark_active_tab_private_if_sensitive(&mut self) {
+        let sensitive = self
+            .selected
+            .and_then(|idx| self.ops.get(idx))
+            .is_some_and(|op| sensitive_tool_id(op.id));
+        if sensitive {
+            if let Some(tab) = self.tabs.get_mut(self.tab_active) {
+                tab.private = true;
+            }
+        }
+    }
+
+    fn select_tool(&mut self, idx: usize) {
+        self.mark_active_tab_private_if_sensitive();
+        self.selected = Some(idx);
     }
 
     fn load_tab(&mut self, n: usize) {
@@ -1685,21 +1828,32 @@ impl App {
             let op = self.ops[idx];
             match (op.run)(&self.input, &self.param) {
                 Ok(out) => {
+                    if sensitive_tool_id(op.id) {
+                        if let Some(tab) = self.tabs.get_mut(self.tab_active) {
+                            tab.private = true;
+                        }
+                    }
                     let ts = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .map(|d| d.as_secs() as i64)
                         .unwrap_or(0);
-                    self.history.insert(
-                        0,
-                        HistEntry {
-                            ts,
-                            tool: idx,
-                            input: self.input.clone(),
-                            param: self.param.clone(),
-                            output: out.clone(),
-                        },
-                    );
-                    self.history.truncate(50);
+                    let private_tab = self
+                        .tabs
+                        .get(self.tab_active)
+                        .is_some_and(|tab| tab.private);
+                    if !private_tab {
+                        self.history.insert(
+                            0,
+                            HistEntry {
+                                ts,
+                                tool: idx,
+                                input: self.input.clone(),
+                                param: self.param.clone(),
+                                output: out.clone(),
+                            },
+                        );
+                        self.history.truncate(50);
+                    }
                     self.output = out;
                     self.status = format!("✓ {} done", op.name);
                     self.recents.retain(|id| id != op.id);
@@ -1803,7 +1957,7 @@ impl App {
         if is_pdf {
             self.input = path.display().to_string();
             if let Some(idx) = self.ops.iter().position(|o| o.id == "pdf-info") {
-                self.selected = Some(idx);
+                self.select_tool(idx);
                 self.active_cat = self.ops[idx].category.to_string();
                 self.run_selected();
                 self.status = format!("Dropped PDF: {}", path.display());
@@ -1892,7 +2046,7 @@ impl App {
                     });
             });
         if let Some(idx) = pick {
-            self.selected = Some(idx);
+            self.select_tool(idx);
             self.active_cat = self.ops[idx].category.to_string();
             self.view = View::Tools;
             self.param.clear();
@@ -2225,8 +2379,8 @@ impl App {
         self.status = "Batch run is available in the Windows build".into();
     }
 
-    /// Scan the replace folder and return (file, count, samples) hits.
-    fn rep_scan(&self) -> Result<RepHits, String> {
+    /// Scan the replace folder and return hits plus an incomplete-scan flag.
+    fn rep_scan(&self) -> Result<(RepHits, bool), String> {
         let root = std::path::PathBuf::from(self.rep_folder.trim());
         if !root.is_dir() {
             return Err("Pick a folder first.".into());
@@ -2245,70 +2399,52 @@ impl App {
             .map(|e| e.trim().trim_start_matches('.').to_lowercase())
             .filter(|e| !e.is_empty())
             .collect();
+        let (files, truncated) = replace_scan_files(&root)?;
         let mut hits: RepHits = Vec::new();
-        let mut stack = vec![root];
-        let mut scanned = 0usize;
-        while let Some(dir) = stack.pop() {
-            let Ok(rd) = std::fs::read_dir(&dir) else {
+        for path in files {
+            if !exts.is_empty() {
+                let ext = path
+                    .extension()
+                    .map(|e| e.to_string_lossy().to_lowercase())
+                    .unwrap_or_default();
+                if !exts.contains(&ext) {
+                    continue;
+                }
+            }
+            let Ok(bytes) = std::fs::read(&path) else {
                 continue;
             };
-            for entry in rd.flatten() {
-                let path = entry.path();
-                let name = entry.file_name().to_string_lossy().into_owned();
-                if path.is_dir() {
-                    if !matches!(name.as_str(), ".git" | "target" | "node_modules") {
-                        stack.push(path);
-                    }
-                    continue;
-                }
-                scanned += 1;
-                if scanned > 5000 {
-                    break;
-                }
-                if !exts.is_empty() {
-                    let ext = path
-                        .extension()
-                        .map(|e| e.to_string_lossy().to_lowercase())
-                        .unwrap_or_default();
-                    if !exts.contains(&ext) {
-                        continue;
-                    }
-                }
-                let Ok(bytes) = std::fs::read(&path) else {
-                    continue;
+            if bytes.len() > 2_000_000 {
+                continue;
+            }
+            let Ok(text) = String::from_utf8(bytes) else {
+                continue;
+            };
+            let mut count = 0usize;
+            let mut samples: Vec<(usize, String)> = Vec::new();
+            for (ln, line) in text.lines().enumerate() {
+                let c = match &re {
+                    Some(re) => re.find_iter(line).count(),
+                    None => line.matches(self.rep_find.as_str()).count(),
                 };
-                if bytes.len() > 2_000_000 {
-                    continue;
-                }
-                let Ok(text) = String::from_utf8(bytes) else {
-                    continue;
-                };
-                let mut count = 0usize;
-                let mut samples: Vec<(usize, String)> = Vec::new();
-                for (ln, line) in text.lines().enumerate() {
-                    let c = match &re {
-                        Some(re) => re.find_iter(line).count(),
-                        None => line.matches(self.rep_find.as_str()).count(),
-                    };
-                    if c > 0 {
-                        count += c;
-                        if samples.len() < 3 {
-                            samples.push((ln + 1, line.trim().chars().take(120).collect()));
-                        }
+                if c > 0 {
+                    count += c;
+                    if samples.len() < 3 {
+                        samples.push((ln + 1, line.trim().chars().take(120).collect()));
                     }
                 }
-                if count > 0 {
-                    hits.push((path, count, samples));
-                }
+            }
+            if count > 0 {
+                hits.push((path, count, samples));
             }
         }
         hits.sort_by(|a, b| a.0.cmp(&b.0));
-        Ok(hits)
+        Ok((hits, truncated))
     }
 
     fn replace_ui(&mut self, ui: &mut egui::Ui) {
         ui.heading("Project find & replace");
-        ui.label("Searches text files under a folder (skips .git, target, node_modules; files over 2 MB are skipped). Preview first \u{2014} Apply only writes the files the preview found, and first keeps each original beside it as a <name>.bak backup.");
+        ui.label("Searches text files under a folder (skips links, .git, target, node_modules, and files over 2 MB; scans up to 5,000 files, 10,000 folders, and 100 MB total). Preview first \u{2014} Apply only writes the files the preview found, and first keeps each original beside it as a <name>.bak backup.");
         ui.horizontal(|ui| {
             ui.label("Folder:");
             ui.add(
@@ -2339,9 +2475,17 @@ impl App {
             );
             if ui.button("\u{1F50D} Preview").clicked() {
                 match self.rep_scan() {
-                    Ok(hits) => {
+                    Ok((hits, truncated)) => {
                         let total: usize = hits.iter().map(|h| h.1).sum();
-                        self.rep_note = format!("{} match(es) in {} file(s).", total, hits.len());
+                        self.rep_note = if truncated {
+                            format!(
+                                "{} match(es) in {} file(s). Safety limit reached; preview is incomplete.",
+                                total,
+                                hits.len()
+                            )
+                        } else {
+                            format!("{} match(es) in {} file(s).", total, hits.len())
+                        };
                         self.rep_hits = hits;
                         self.rep_key = format!(
                             "{}\u{1}{}\u{1}{}\u{1}{}",
@@ -2670,7 +2814,7 @@ impl eframe::App for App {
                     .unwrap_or(false);
                 if !in_cat {
                     if let Some(i) = chip_pick {
-                        self.selected = Some(i);
+                        self.select_tool(i);
                         self.param.clear();
                         self.status.clear();
                     }
@@ -2690,7 +2834,7 @@ impl eframe::App for App {
                 if resp.changed() {
                     let f = self.filtered();
                     if let Some(first) = f.first() {
-                        self.selected = Some(*first);
+                        self.select_tool(*first);
                         self.active_cat = self.ops[*first].category.to_string();
                     }
                 }
@@ -2766,7 +2910,7 @@ impl eframe::App for App {
                             }
                         });
                     if let Some(idx) = ribbon_pick {
-                        self.selected = Some(idx);
+                        self.select_tool(idx);
                         self.param.clear();
                         self.status.clear();
                     }
@@ -3044,7 +3188,7 @@ impl eframe::App for App {
                     }
                 });
                 if let Some(i) = jump {
-                    self.selected = Some(i);
+                    self.select_tool(i);
                     self.active_cat = self.ops[i].category.to_string();
                     self.param.clear();
                     self.run_selected();
@@ -3246,6 +3390,15 @@ mod tests {
     }
 
     #[test]
+    fn sensitive_history_is_discarded_and_scheduled_for_cleanup() {
+        let ops = all_ops();
+        let text = "schema_version\t1\nhist\t1\tgen-password-strength\tknown-password\t\tFair\n";
+        let st = parse_settings(text, &ops);
+        assert!(st.history.is_empty());
+        assert!(st.purged_sensitive_history);
+    }
+
+    #[test]
     fn settings_from_a_newer_version_load_defaults_and_are_flagged() {
         // A file written by a future DevTextTools must load as
         // defaults with the future flag set (the GUI warns and
@@ -3281,12 +3434,14 @@ mod tests {
                 input: "tabs\tand\nnewlines".into(),
                 param: "p".into(),
                 output: "o".into(),
+                private: false,
             },
             WorkTab {
                 tool: None,
                 input: String::new(),
                 param: String::new(),
                 output: "second".into(),
+                private: false,
             },
         ];
         let text = serialize_session(&tabs, 1, View::RegexLab, &ops);
@@ -3298,6 +3453,68 @@ mod tests {
         assert_eq!(tabs2[0].input, "tabs\tand\nnewlines");
         assert_eq!(tabs2[1].tool, None);
         assert_eq!(tabs2[1].output, "second");
+    }
+
+    #[test]
+    fn sensitive_session_data_is_never_serialized_or_restored() {
+        let ops = all_ops();
+        let tool = ops
+            .iter()
+            .position(|op| op.id == "gen-password-strength")
+            .expect("password checker is registered");
+        let tabs = vec![WorkTab {
+            tool: Some(tool),
+            input: "known-password".into(),
+            param: "secret-parameter".into(),
+            output: "strength result".into(),
+            ..Default::default()
+        }];
+        let text = serialize_session(&tabs, 0, View::Tools, &ops);
+        assert!(!text.contains("known-password"));
+        assert!(!text.contains("secret-parameter"));
+        assert!(!text.contains("strength result"));
+
+        let (restored, _, _) = parse_session(
+            "schema_version\t1\ntab\tgen-password-strength\tknown-password\tsecret-parameter\tstrength result\n",
+            &ops,
+        )
+        .expect("legacy sensitive session parses");
+        assert!(restored[0].private);
+        assert!(restored[0].input.is_empty());
+        assert!(restored[0].param.is_empty());
+        assert!(restored[0].output.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn replace_scan_skips_symlinks_and_stays_within_selected_folder() {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir().join(format!("devtext-replace-{}", std::process::id()));
+        let outside = root.with_extension("outside");
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&outside);
+        std::fs::create_dir_all(root.join("nested")).expect("create test root");
+        std::fs::create_dir_all(&outside).expect("create outside folder");
+        std::fs::write(root.join("inside.txt"), "inside").expect("write in-root file");
+        std::fs::write(root.join("nested/child.txt"), "child").expect("write nested file");
+        std::fs::write(outside.join("secret.txt"), "outside").expect("write outside file");
+        symlink(&outside, root.join("escape")).expect("create outside directory link");
+        symlink(&root, root.join("nested/back")).expect("create directory cycle");
+
+        let (files, truncated) = replace_scan_files(&root).expect("scan bounded test folder");
+        let paths: Vec<_> = files
+            .iter()
+            .filter_map(|path| path.file_name())
+            .map(|name| name.to_string_lossy().into_owned())
+            .collect();
+        assert!(!truncated);
+        assert!(paths.iter().any(|name| name == "inside.txt"));
+        assert!(paths.iter().any(|name| name == "child.txt"));
+        assert!(paths.iter().all(|name| name != "secret.txt"));
+
+        std::fs::remove_dir_all(root).expect("remove test root");
+        std::fs::remove_dir_all(outside).expect("remove outside folder");
     }
 
     #[test]
