@@ -143,10 +143,37 @@ fn calculators() {
 fn generators_produce_shapes() {
     let u = run_op("gen-uuid", "", "3").unwrap();
     assert_eq!(u.lines().count(), 3);
-    assert_eq!(u.lines().next().unwrap().len(), 36);
+    assert!(u.lines().all(|uuid| {
+        uuid.len() == 36
+            && uuid.chars().nth(14) == Some('4')
+            && matches!(uuid.chars().nth(19), Some('8' | '9' | 'a' | 'b'))
+    }));
     let pw = run_op("gen-password", "", "16|||2").unwrap();
     assert_eq!(pw.lines().count(), 2);
     assert!(pw.lines().all(|l| l.chars().count() == 16));
+    let alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*()-_=+";
+    assert!(pw
+        .lines()
+        .all(|password| password.chars().all(|c| alphabet.contains(c))));
+}
+
+#[test]
+fn random_integer_generator_handles_the_full_signed_range() {
+    let out = run_op(
+        "gen-random-number",
+        "",
+        "-9223372036854775808|||9223372036854775807|||20",
+    )
+    .unwrap();
+    assert_eq!(out.lines().count(), 20);
+    assert!(out.lines().all(|line| line.parse::<i64>().is_ok()));
+}
+
+#[test]
+fn seeded_line_shuffle_remains_reproducible() {
+    let first = run_op("lines-shuffle", "a\nb\nc\nd", "1234").unwrap();
+    let second = run_op("lines-shuffle", "a\nb\nc\nd", "1234").unwrap();
+    assert_eq!(first, second);
 }
 
 #[test]
