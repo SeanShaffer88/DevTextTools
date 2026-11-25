@@ -8,6 +8,7 @@
 // else is logically missing (each guard returns). Allowed once, here, on purpose.
 #![allow(clippy::possible_missing_else)]
 
+pub mod agent_cli;
 pub mod ops;
 pub mod paths;
 pub mod win32;

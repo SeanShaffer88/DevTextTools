@@ -17,6 +17,10 @@ path = "src/lib.rs"
 name = "DevTextTools"
 path = "src/main.rs"
 
+[[bin]]
+name = "devtexttools-cli"
+path = "src/bin/devtexttools-cli.rs"
+
 [dependencies]
 lopdf = "0.46"
 base64 = "0.22"

@@ -105,7 +105,7 @@ Per-site coverage and honest gaps are in [docs/COVERAGE.md](docs/COVERAGE.md); p
 
 ## Requirements
 
-- Windows 10 or 11, 64-bit (the program itself is built and tested from source on Linux in development; the Windows build is produced by cross-compiling — see *Verified status*)
+- Windows 11 x64 (the program itself is built and tested from source on Linux in development; the Windows build is produced by cross-compiling — see *Verified status*)
 - No internet, account, or install rights needed for the portable build
 
 ## Install / setup
@@ -123,27 +123,25 @@ Per-site coverage and honest gaps are in [docs/COVERAGE.md](docs/COVERAGE.md); p
 
 ## Command line
 
-The same tools, without the window (text goes in through standard input, the result comes out as standard output):
+Both the installer and portable zip include `devtexttools-cli.exe`, a real Windows console program. It exposes every registered text/developer operation, with structured JSON discovery and request/response for scripts and local AI. It makes no network calls and does not save request input or output; PDF merge/split write only to the output paths you specify.
 
 ```
-devtexttools --list
-devtexttools --search roman
-echo hello world | devtexttools case-upper
-echo 255 | devtexttools conv-base --param 10|||16
+.\devtexttools-cli.exe --list --json
+.\devtexttools-cli.exe --search roman --json
+.\devtexttools-cli.exe --describe conv-base --json
+echo hello world | .\devtexttools-cli.exe case-upper
+echo 255 | .\devtexttools-cli.exe conv-base --param '10|||16'
 ```
 
-Maintenance commands:
+For local AI, send one JSON request through stdin; the CLI returns one JSON response on stdout:
 
 ```
-devtexttools --version                       print the version
-devtexttools case-upper --json               one JSON object: {"ok":true,"tool":"case-upper","output":"…"}
-devtexttools --clean                         remove DevTextTools' own files (settings + saved session) from its data folder — asks first
-devtexttools --clean --dry-run               preview what --clean would remove
-devtexttools --clean --silent                remove without asking
-devtexttools --uninstall                     like --clean, and explains how the program files themselves are removed
+'{"tool":"case-upper","input":"hello","param":""}' | .\devtexttools-cli.exe --request-json
 ```
 
-`--clean`/`--uninstall` refuse while a DevTextTools window is open, and only ever touch the program's own files in its `data` folder.
+The request accepts `tool` (or `id`), `input`, and optional `param` string fields. `--protocol` prints the protocol summary. For installed copies, call the executable from `%LOCALAPPDATA%\Programs\DevTextTools`; the installer does not modify `PATH`.
+
+Maintenance commands are also available on the console CLI: `.\devtexttools-cli.exe --clean [--dry-run] [--silent]` and `.\devtexttools-cli.exe --uninstall`. They only touch DevTextTools' own data files and refuse while the window is open.
 
 ## Build instructions (developers)
 

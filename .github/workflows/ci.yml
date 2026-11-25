@@ -31,3 +31,5 @@ jobs:
           cargo fmt --all -- --check
           cargo clippy --all-targets --locked -- -D warnings
           cargo test --locked
+      - name: Build CLI release binary
+        run: cargo build --release --locked --bin devtexttools-cli

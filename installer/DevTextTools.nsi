@@ -24,6 +24,7 @@ Page instfiles
 Section "Install"
   SetOutPath "$INSTDIR"
   File "..\dist\DevTextTools.exe"
+  File "..\dist\devtexttools-cli.exe"
   File "..\LICENSE"
   File "..\README.md"
   CreateDirectory "$SMPROGRAMS\DevTextTools"
@@ -37,6 +38,7 @@ SectionEnd
 
 Section "Uninstall"
   Delete "$INSTDIR\DevTextTools.exe"
+  Delete "$INSTDIR\devtexttools-cli.exe"
   Delete "$INSTDIR\LICENSE"
   Delete "$INSTDIR\README.md"
   Delete "$INSTDIR\Uninstall.exe"
