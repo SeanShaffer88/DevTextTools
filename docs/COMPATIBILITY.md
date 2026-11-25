@@ -2,7 +2,7 @@
 
 ## Operating system
 
-- **Windows 10 or Windows 11, 64-bit (x64)** — the only supported platform for the shipped binaries.
+- **Windows 11, 64-bit (x64)** — the only supported platform for the shipped binaries.
 - Releases are x64 only. There are no x86 or ARM64 builds (dropped before v0.7.2's x64-only rule; the conformance release matrix keeps it that way).
 
 ## Runtime requirements

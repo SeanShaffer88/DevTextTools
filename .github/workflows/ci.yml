@@ -12,7 +12,7 @@ jobs:
   gate:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -31,3 +31,5 @@ jobs:
           cargo fmt --all -- --check
           cargo clippy --all-targets --locked -- -D warnings
           cargo test --locked
+      - name: Build CLI release binary
+        run: cargo build --release --locked --bin devtexttools-cli
